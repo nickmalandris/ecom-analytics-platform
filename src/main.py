@@ -1,10 +1,53 @@
+"""
+FastAPI application entry point.
+
+Run with:
+    uv run uvicorn src.main:app --reload --port 8000
+"""
+
+import logging
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
+
+from src.api.reports import router as reports_router
+from src.api.tenants import router as tenants_router
+from src.scheduler.scheduler import start_scheduler, stop_scheduler
+
+# ── Logging ──────────────────────────────────────
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger(__name__)
+
+
+# ── Lifespan ─────────────────────────────────────
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup/shutdown lifecycle for the FastAPI app."""
+    logger.info("Starting up...")
+    start_scheduler()
+    yield
+    logger.info("Shutting down...")
+    stop_scheduler()
+
+
+# ── App ──────────────────────────────────────────
 
 app = FastAPI(
     title="Shopify & Meta Ads Analytics",
     description="Multi-tenant analytics platform with LLM-powered weekly reports",
     version="0.1.0",
+    lifespan=lifespan,
 )
+
+# Mount routers
+app.include_router(tenants_router, prefix="/api")
+app.include_router(reports_router, prefix="/api")
 
 
 @app.get("/health")

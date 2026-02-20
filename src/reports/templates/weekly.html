@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weekly Analytics Report</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: #1a1a2e;
+            background-color: #f0f0f5;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 640px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .card {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 32px;
+            margin-bottom: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        .header {
+            text-align: center;
+            padding-bottom: 24px;
+            border-bottom: 2px solid #e8e8f0;
+            margin-bottom: 24px;
+        }
+        .header h1 {
+            font-size: 22px;
+            font-weight: 700;
+            margin: 0 0 4px 0;
+            color: #1a1a2e;
+        }
+        .header .period {
+            font-size: 14px;
+            color: #6b7280;
+        }
+        .header .tenant {
+            font-size: 13px;
+            color: #9ca3af;
+            margin-top: 2px;
+        }
+        .section-title {
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: #6366f1;
+            margin: 28px 0 16px 0;
+        }
+        .section-title:first-of-type {
+            margin-top: 0;
+        }
+        .report-content {
+            font-size: 15px;
+            color: #374151;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .report-content p {
+            margin: 0 0 12px 0;
+        }
+        .footer {
+            text-align: center;
+            font-size: 12px;
+            color: #9ca3af;
+            padding: 16px 0;
+        }
+        .footer a {
+            color: #6366f1;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <div class="header">
+                <h1>Weekly Analytics Report</h1>
+                <div class="period">{{ period_start }} &mdash; {{ period_end }}</div>
+                <div class="tenant">{{ tenant_name }}</div>
+            </div>
+
+            <div class="report-content">{{ report_body | safe }}</div>
+        </div>
+
+        <div class="footer">
+            Generated on {{ generated_at }}<br>
+            Powered by Shopify + Meta Ads Analytics
+        </div>
+    </div>
+</body>
+</html>
