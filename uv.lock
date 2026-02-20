@@ -3206,6 +3206,7 @@ dev = [
 [package.dev-dependencies]
 dev = [
     { name = "faker" },
+    { name = "httpx" },
     { name = "numpy" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -3237,6 +3238,7 @@ provides-extras = ["dev"]
 [package.metadata.requires-dev]
 dev = [
     { name = "faker", specifier = ">=30.0.0" },
+    { name = "httpx", specifier = ">=0.27.0" },
     { name = "numpy", specifier = ">=1.26.0" },
     { name = "pytest", specifier = ">=8.0.0" },
     { name = "pytest-asyncio", specifier = ">=0.24.0" },
