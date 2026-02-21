@@ -457,10 +457,14 @@ def transform_order(order: dict, shop_url: str) -> tuple[dict, list[dict]]:
         line_items_jsonb = _transform_line_items(li_nodes, oid)
 
     # Refunds
-    raw_refunds = order.get("refunds", [])
+    raw_refunds = order.get("refunds")
+    refund_nodes = []
+    if raw_refunds:
+        refund_nodes = _edges_to_list(raw_refunds) if isinstance(raw_refunds, dict) else raw_refunds
+
     refunds_jsonb = []
     refund_rows = []
-    for r in raw_refunds:
+    for r in refund_nodes:
         refund_row, refund_embedded = _transform_refund(r, oid, shop_url)
         refund_rows.append(refund_row)
         refunds_jsonb.append(refund_embedded)
