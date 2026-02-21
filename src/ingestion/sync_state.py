@@ -129,6 +129,9 @@ def mark_sync_failed(
     error_message: str,
 ) -> None:
     """Mark a resource sync as failed."""
+    # Rollback any active transaction so we can write the error state
+    conn.rollback()
+    
     now = datetime.now(timezone.utc)
     with conn.cursor() as cur:
         cur.execute(

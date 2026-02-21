@@ -27,10 +27,12 @@ def extract_gid(gid_str: str | None) -> int | None:
 
     "gid://shopify/Order/123456" → 123456
     "gid://shopify/ProductVariant/789" → 789
+    "gid://shopify/MailingAddress/989?model_name=..." → 989
     """
     if not gid_str:
         return None
-    match = re.search(r"/(\d+)$", str(gid_str))
+    # Match digits at the end of path, ignoring query params
+    match = re.search(r"/(\d+)(?:\?|$)", str(gid_str))
     return int(match.group(1)) if match else None
 
 

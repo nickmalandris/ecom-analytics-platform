@@ -303,9 +303,13 @@ def full_sync(tenant_id: int, db_url: str | None = None) -> dict:
                 jsonl_path = bulk.execute_bulk_query(CUSTOMERS_BULK, query_filter="")
 
                 customer_rows = []
-                for record in ShopifyBulkClient.stream_jsonl(jsonl_path):
-                    if "Customer" in record.get("id", ""):
-                        customer_rows.append(transform_customer(record, store_url))
+                # Use reassemble to handle addressesV2 connection children
+                for parent in ShopifyBulkClient.reassemble_with_children(
+                    jsonl_path,
+                    "Customer",
+                    [{"type": "MailingAddress", "field": "addressesV2"}]
+                ):
+                    customer_rows.append(transform_customer(parent, store_url))
 
                 with conn.cursor() as cur:
                     cur.execute(f"TRUNCATE TABLE {schema}.customers CASCADE")
