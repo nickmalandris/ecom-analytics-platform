@@ -60,7 +60,16 @@ def run_weekly_report(tenant_id: int = 1) -> str | None:
         logger.error(f"Tenant {tenant_id} not found")
         return None
 
-    # 2. Refresh materialized views
+    # 2. Sync Shopify data (incremental)
+    logger.info("Running incremental Shopify sync...")
+    try:
+        from src.ingestion.shopify_sync import incremental_sync
+        sync_result = incremental_sync(tenant_id, db_url)
+        logger.info(f"Shopify sync complete: {sync_result}")
+    except Exception as e:
+        logger.warning(f"Shopify sync failed (continuing with existing data): {e}")
+
+    # 3. Refresh materialized views
     logger.info("Refreshing data models...")
     try:
         from src.data.model_runner import run_model, get_db_url
@@ -90,7 +99,7 @@ def run_weekly_report(tenant_id: int = 1) -> str | None:
         # Continue anyway — stale data is better than no report
         pass
 
-    # 3. Generate report via agent
+    # 4. Generate report via agent
     logger.info("Generating report via LLM agent...")
     report_end = date.today() - timedelta(days=1)  # Yesterday
     try:
@@ -106,7 +115,7 @@ def run_weekly_report(tenant_id: int = 1) -> str | None:
     report_start = report_end - timedelta(days=6)
     logger.info(f"Report generated for {report_start} to {report_end}")
 
-    # 4. Build HTML email
+    # 5. Build HTML email
     html_body = build_weekly_report(
         report_text=report_text,
         tenant_name=tenant["name"],
@@ -114,7 +123,7 @@ def run_weekly_report(tenant_id: int = 1) -> str | None:
         period_end=str(report_end),
     )
 
-    # 5. Send email
+    # 6. Send email
     recipients = tenant["email_recipients"]
     if recipients:
         subject = f"Weekly Analytics Report | {tenant['name']} | {report_start} to {report_end}"

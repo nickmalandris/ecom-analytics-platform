@@ -216,10 +216,7 @@ def generate_report(
     """
     load_dotenv()
     if db_url is None:
-        db_url = os.getenv(
-            "DATABASE_URL",
-            "postgresql://analytics_user:analytics_pass@localhost:5435/analytics",
-        )
+        db_url = os.getenv("DATABASE_URL")
     if report_end_date is None:
         report_end_date = date.today() - timedelta(days=1)  # Yesterday
 

@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     )
 
     # Database
-    database_url: str = "postgresql://analytics_user:analytics_pass@localhost:5432/analytics"
+    database_url: str
 
     # LLM
     llm_provider: str = "openai"
@@ -17,6 +17,12 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     anthropic_api_key: str = ""
     google_api_key: str = ""
+
+    # Shopify
+    shopify_access_token: str = ""
+    shopify_client_id: str = ""
+    shopify_secret_key: str = ""
+    shopify_store_url: str = ""
 
     # Email
     smtp_host: str = "smtp.gmail.com"

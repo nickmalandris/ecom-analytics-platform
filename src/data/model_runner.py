@@ -76,7 +76,7 @@ def parse_args():
 
 def get_db_url():
     load_dotenv(PROJECT_ROOT / ".env")
-    return os.getenv("DATABASE_URL", "postgresql://analytics_user:analytics_pass@localhost:5435/analytics")
+    return os.getenv("DATABASE_URL")
 
 
 def get_models_to_run(args) -> list[str]:

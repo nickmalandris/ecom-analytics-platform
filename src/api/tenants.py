@@ -20,10 +20,7 @@ load_dotenv()
 
 
 def _get_db_url() -> str:
-    return os.getenv(
-        "DATABASE_URL",
-        "postgresql://analytics_user:analytics_pass@localhost:5435/analytics",
-    )
+    return os.getenv("DATABASE_URL")
 
 
 def _generate_api_key() -> str:

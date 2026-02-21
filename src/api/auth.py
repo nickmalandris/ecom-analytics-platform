@@ -15,14 +15,11 @@ from fastapi.security import APIKeyHeader
 load_dotenv()
 
 API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
-ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "sk_admin_dev_key_001")
+ADMIN_API_KEY = os.getenv("ADMIN_API_KEY")
 
 
 def _get_db_url() -> str:
-    return os.getenv(
-        "DATABASE_URL",
-        "postgresql://analytics_user:analytics_pass@localhost:5435/analytics",
-    )
+    return os.getenv("DATABASE_URL")
 
 
 def resolve_tenant(api_key: str | None = Security(API_KEY_HEADER)) -> dict:
