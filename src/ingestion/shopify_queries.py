@@ -1,5 +1,5 @@
 """
-GraphQL query definitions for Shopify Admin API (version 2025-10).
+GraphQL query definitions for Shopify Admin API (version 2026-01).
 
 Two variants per resource:
   - PAGINATED: Used for incremental sync with cursor-based pagination.
@@ -9,7 +9,7 @@ The bulk variants omit `first`, `after`, `pageInfo` — Shopify handles
 pagination internally and returns a flat JSONL file.
 """
 
-API_VERSION = "2025-10"
+API_VERSION = "2026-01"
 
 # ─── Shared fragments ────────────────────────────────────
 
@@ -37,32 +37,27 @@ _ORDER_FIELDS = """
     cancelledAt
     closedAt
     processedAt
-    currency
+    currencyCode
     presentmentCurrencyCode
     confirmed
-    test
     cancelReason
     tags
     note
     sourceIdentifier
+    sourceName
     financialStatus: displayFinancialStatus
     fulfillmentStatus: displayFulfillmentStatus
     customerLocale
-    orderNumber
-    sourceName: channelInformation { channelDefinition { handle } }
-    subtotalPriceSet { MONEY_FIELDS }
-    totalDiscountsSet { MONEY_FIELDS }
-    totalPriceSet { MONEY_FIELDS }
-    totalTaxSet { MONEY_FIELDS }
-    totalShippingPriceSet { MONEY_FIELDS }
+    number
+    customerAcceptsMarketing
+    originalTotalPriceSet { MONEY_FIELDS }
     currentSubtotalPriceSet { MONEY_FIELDS }
     currentTotalDiscountsSet { MONEY_FIELDS }
     currentTotalPriceSet { MONEY_FIELDS }
     currentTotalTaxSet { MONEY_FIELDS }
-    totalWeight
-    taxesIncluded
-    taxExempt
-    buyerAcceptsMarketing
+    currentShippingPriceSet { MONEY_FIELDS }
+    currentTotalWeight
+    estimatedTaxes
     billingAddress {
       firstName lastName company
       address1 address2 city
@@ -78,7 +73,7 @@ _ORDER_FIELDS = """
       zip phone
     }
     customer {
-      id email firstName lastName phone
+      id firstName lastName
     }
     discountCodes
     discountApplications(first: 10) {
@@ -95,7 +90,7 @@ _ORDER_FIELDS = """
         discountedPriceSet { MONEY_FIELDS }
       }}
     }
-    taxLines {
+    currentTaxLines {
       title rate ratePercentage
       priceSet { MONEY_FIELDS }
     }
@@ -108,9 +103,9 @@ _ORDER_FIELDS = """
         quantity
         sku
         vendor
-        requiresShipping
         taxable
         isGiftCard
+        requiresShipping
         originalUnitPriceSet { MONEY_FIELDS }
         discountedUnitPriceSet { MONEY_FIELDS }
         totalDiscountSet { MONEY_FIELDS }
@@ -196,7 +191,7 @@ ORDERS_BULK = """
 _PRODUCT_FIELDS = """
     id
     title
-    bodyHtml
+    descriptionHtml
     vendor
     productType
     handle
@@ -207,16 +202,21 @@ _PRODUCT_FIELDS = """
     createdAt
     updatedAt
     totalInventory
-    totalVariants
     options {
       id name position values
     }
-    featuredImage {
-      id url altText width height
+    featuredMedia {
+      ... on MediaImage {
+        id
+        image { url altText width height }
+      }
     }
-    images(first: 10) {
+    media(first: 10) {
       edges { node {
-        id url altText width height
+        ... on MediaImage {
+          id
+          image { url altText width height }
+        }
       }}
     }
     variants(first: 100) {
@@ -232,14 +232,9 @@ _PRODUCT_FIELDS = """
         inventoryQuantity
         inventoryPolicy
         inventoryItem { id }
-        weight
-        weightUnit
         taxable
-        taxCode
-        requiresShipping
         availableForSale
         displayName
-        image { id url }
         createdAt
         updatedAt
       }}
@@ -280,10 +275,10 @@ PRODUCTS_BULK = """
 
 _CUSTOMER_FIELDS = """
     id
-    email
+    defaultEmailAddress { emailAddress marketingState marketingOptInLevel }
     firstName
     lastName
-    phone
+    defaultPhoneNumber { phoneNumber marketingState marketingOptInLevel }
     state
     tags
     note
@@ -296,8 +291,6 @@ _CUSTOMER_FIELDS = """
     numberOfOrders
     amountSpent { amount currencyCode }
     lastOrder { id name }
-    emailMarketingConsent { marketingState marketingOptInLevel consentUpdatedAt }
-    smsMarketingConsent { marketingState marketingOptInLevel consentUpdatedAt }
     defaultAddress {
       id firstName lastName company
       address1 address2 city
@@ -305,12 +298,14 @@ _CUSTOMER_FIELDS = """
       country countryCodeV2
       zip phone
     }
-    addresses {
-      id firstName lastName company
-      address1 address2 city
-      province provinceCode
-      country countryCodeV2
-      zip phone
+    addressesV2(first: 10) {
+      edges { node {
+        id firstName lastName company
+        address1 address2 city
+        province provinceCode
+        country countryCodeV2
+        zip phone
+      }}
     }
 """
 

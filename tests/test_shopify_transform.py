@@ -112,7 +112,7 @@ class TestEdgesToList:
 MOCK_PRODUCT = {
     "id": "gid://shopify/Product/1001",
     "title": "Classic Cotton Tee",
-    "bodyHtml": "<p>A classic tee</p>",
+    "descriptionHtml": "<p>A classic tee</p>",
     "vendor": "TestBrand",
     "productType": "Apparel",
     "handle": "classic-cotton-tee",
@@ -123,19 +123,23 @@ MOCK_PRODUCT = {
     "createdAt": "2025-11-22T00:00:00Z",
     "updatedAt": "2026-02-19T12:00:00Z",
     "totalInventory": 150,
-    "totalVariants": 3,
     "options": [
         {"id": "gid://shopify/ProductOption/100", "name": "Size", "position": 1, "values": ["S", "M", "L"]},
     ],
-    "featuredImage": {
-        "id": "gid://shopify/ProductImage/500",
-        "url": "https://cdn.shopify.com/image.jpg",
-        "altText": "Tee",
-        "width": 800,
-        "height": 600,
+    "featuredMedia": {
+        "id": "gid://shopify/MediaImage/500",
+        "image": {
+            "url": "https://cdn.shopify.com/image.jpg",
+            "altText": "Tee",
+            "width": 800,
+            "height": 600,
+        },
     },
-    "images": {"edges": [
-        {"node": {"id": "gid://shopify/ProductImage/500", "url": "https://cdn.shopify.com/image.jpg", "altText": "Tee", "width": 800, "height": 600}},
+    "media": {"edges": [
+        {"node": {
+            "id": "gid://shopify/MediaImage/500",
+            "image": {"url": "https://cdn.shopify.com/image.jpg", "altText": "Tee", "width": 800, "height": 600},
+        }},
     ]},
     "variants": {"edges": [
         {"node": {
@@ -150,14 +154,9 @@ MOCK_PRODUCT = {
             "inventoryQuantity": 50,
             "inventoryPolicy": "DENY",
             "inventoryItem": {"id": "gid://shopify/InventoryItem/3001"},
-            "weight": 0.3,
-            "weightUnit": "KILOGRAMS",
             "taxable": True,
-            "taxCode": None,
-            "requiresShipping": True,
             "availableForSale": True,
             "displayName": "Classic Cotton Tee - S",
-            "image": None,
             "createdAt": "2025-11-22T00:00:00Z",
             "updatedAt": "2026-02-19T12:00:00Z",
         }},
@@ -173,14 +172,9 @@ MOCK_PRODUCT = {
             "inventoryQuantity": 60,
             "inventoryPolicy": "DENY",
             "inventoryItem": {"id": "gid://shopify/InventoryItem/3002"},
-            "weight": 0.3,
-            "weightUnit": "KILOGRAMS",
             "taxable": True,
-            "taxCode": None,
-            "requiresShipping": True,
             "availableForSale": True,
             "displayName": "Classic Cotton Tee - M",
-            "image": None,
             "createdAt": "2025-11-22T00:00:00Z",
             "updatedAt": "2026-02-19T12:00:00Z",
         }},
@@ -228,7 +222,8 @@ class TestTransformProduct:
         assert v["sku"] == "CCT-S"
         assert v["option1"] == "S"
         assert v["inventory_quantity"] == 50
-        assert v["weight_unit"] == "kilograms"
+        assert v["weight_unit"] is None  # Removed from API in newer versions
+        assert v["requires_shipping"] is None  # Removed from API in newer versions
         assert v["inventory_policy"] == "deny"
 
     def test_variant_has_airbyte_columns(self):
@@ -336,38 +331,22 @@ MOCK_ORDER = {
     "cancelledAt": None,
     "closedAt": None,
     "processedAt": "2026-02-15T10:00:00Z",
-    "currency": "AUD",
+    "currencyCode": "AUD",
     "presentmentCurrencyCode": "AUD",
     "confirmed": True,
-    "test": False,
     "cancelReason": None,
     "tags": [],
     "note": None,
     "sourceIdentifier": None,
+    "sourceName": "web",
     "financialStatus": "PAID",
     "fulfillmentStatus": "UNFULFILLED",
     "customerLocale": "en-AU",
-    "orderNumber": 1001,
-    "sourceName": {"channelDefinition": {"handle": "web"}},
-    "subtotalPriceSet": {
-        "shopMoney": {"amount": "99.90", "currencyCode": "AUD"},
-        "presentmentMoney": {"amount": "99.90", "currencyCode": "AUD"},
-    },
-    "totalDiscountsSet": {
-        "shopMoney": {"amount": "0.00", "currencyCode": "AUD"},
-        "presentmentMoney": {"amount": "0.00", "currencyCode": "AUD"},
-    },
-    "totalPriceSet": {
+    "number": 1001,
+    "customerAcceptsMarketing": True,
+    "originalTotalPriceSet": {
         "shopMoney": {"amount": "109.89", "currencyCode": "AUD"},
         "presentmentMoney": {"amount": "109.89", "currencyCode": "AUD"},
-    },
-    "totalTaxSet": {
-        "shopMoney": {"amount": "9.99", "currencyCode": "AUD"},
-        "presentmentMoney": {"amount": "9.99", "currencyCode": "AUD"},
-    },
-    "totalShippingPriceSet": {
-        "shopMoney": {"amount": "0.00", "currencyCode": "AUD"},
-        "presentmentMoney": {"amount": "0.00", "currencyCode": "AUD"},
     },
     "currentSubtotalPriceSet": {
         "shopMoney": {"amount": "99.90", "currencyCode": "AUD"},
@@ -385,10 +364,12 @@ MOCK_ORDER = {
         "shopMoney": {"amount": "9.99", "currencyCode": "AUD"},
         "presentmentMoney": {"amount": "9.99", "currencyCode": "AUD"},
     },
-    "totalWeight": 600,
-    "taxesIncluded": True,
-    "taxExempt": False,
-    "buyerAcceptsMarketing": True,
+    "currentShippingPriceSet": {
+        "shopMoney": {"amount": "0.00", "currencyCode": "AUD"},
+        "presentmentMoney": {"amount": "0.00", "currencyCode": "AUD"},
+    },
+    "currentTotalWeight": 600,
+    "estimatedTaxes": False,
     "billingAddress": {
         "firstName": "Jane", "lastName": "Smith", "company": None,
         "address1": "42 Wallaby Way", "address2": None,
@@ -405,15 +386,13 @@ MOCK_ORDER = {
     },
     "customer": {
         "id": "gid://shopify/Customer/5001",
-        "email": "jane@example.com",
         "firstName": "Jane",
         "lastName": "Smith",
-        "phone": None,
     },
     "discountCodes": [],
     "discountApplications": {"edges": []},
     "shippingLines": {"edges": []},
-    "taxLines": [
+    "currentTaxLines": [
         {
             "title": "GST",
             "rate": 0.1,
@@ -515,7 +494,7 @@ class TestTransformOrder:
         assert addr["province_code"] == "NSW"
         assert addr["country_code"] == "AU"
 
-    def test_source_name_from_channel_info(self):
+    def test_source_name_direct(self):
         row, _ = transform_order(MOCK_ORDER, SHOP_URL)
         assert row["source_name"] == "web"
 

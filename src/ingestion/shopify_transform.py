@@ -124,10 +124,9 @@ def transform_product(product: dict, shop_url: str) -> tuple[dict, list[dict]]:
         inv_item = v.get("inventoryItem", {})
         inv_item_id = extract_gid(inv_item.get("id")) if inv_item else None
 
-        # Image
-        v_image = v.get("image")
-        v_image_id = extract_gid(v_image.get("id")) if v_image else None
-        v_image_src = v_image.get("url") if v_image else None
+        # Image — `image` field removed from ProductVariant in 2026-01
+        v_image_id = None
+        v_image_src = None
 
         variant_row = {
             "id": vid,
@@ -142,15 +141,15 @@ def transform_product(product: dict, shop_url: str) -> tuple[dict, list[dict]]:
             "option2": option2,
             "option3": option3,
             "grams": None,  # GraphQL doesn't return grams directly
-            "weight": v.get("weight"),
-            "weight_unit": v.get("weightUnit", "").lower() if v.get("weightUnit") else None,
+            "weight": None,  # Removed from ProductVariant in newer API versions
+            "weight_unit": None,  # Removed from ProductVariant in newer API versions
             "taxable": v.get("taxable"),
-            "tax_code": v.get("taxCode"),
+            "tax_code": None,  # Deprecated on ProductVariant in 2026-01
             "inventory_item_id": inv_item_id,
             "inventory_quantity": v.get("inventoryQuantity"),
             "old_inventory_quantity": None,
             "inventory_policy": v.get("inventoryPolicy", "").lower() if v.get("inventoryPolicy") else None,
-            "requires_shipping": v.get("requiresShipping"),
+            "requires_shipping": None,  # Removed from ProductVariant in newer API versions
             "image_id": v_image_id,
             "image_src": v_image_src,
             "available_for_sale": v.get("availableForSale"),
@@ -193,39 +192,41 @@ def transform_product(product: dict, shop_url: str) -> tuple[dict, list[dict]]:
         for o in raw_options
     ]
 
-    # Images
-    raw_images = product.get("images", [])
-    if isinstance(raw_images, dict):
-        raw_images = _edges_to_list(raw_images)
-    images_jsonb = [
-        {
-            "id": extract_gid(img.get("id")),
+    # Images — `images` replaced by `media` in 2026-01
+    raw_media = product.get("media", product.get("images", []))
+    if isinstance(raw_media, dict):
+        raw_media = _edges_to_list(raw_media)
+    images_jsonb = []
+    for m in raw_media:
+        # media nodes are MediaImage unions; extract nested image
+        img = m.get("image", m)  # fallback to node itself if no nested image
+        images_jsonb.append({
+            "id": extract_gid(m.get("id")),
             "product_id": pid,
             "src": img.get("url"),
             "alt": img.get("altText"),
             "width": img.get("width"),
             "height": img.get("height"),
-        }
-        for img in raw_images
-    ]
+        })
 
-    # Featured image
-    feat = product.get("featuredImage")
+    # Featured image — `featuredImage` replaced by `featuredMedia` in 2026-01
+    feat = product.get("featuredMedia", product.get("featuredImage"))
     image_jsonb = None
     if feat:
+        feat_img = feat.get("image", feat)  # MediaImage has nested image
         image_jsonb = {
             "id": extract_gid(feat.get("id")),
             "product_id": pid,
-            "src": feat.get("url"),
-            "alt": feat.get("altText"),
-            "width": feat.get("width"),
-            "height": feat.get("height"),
+            "src": feat_img.get("url"),
+            "alt": feat_img.get("altText"),
+            "width": feat_img.get("width"),
+            "height": feat_img.get("height"),
         }
 
     product_row = {
         "id": pid,
         "title": product.get("title"),
-        "body_html": product.get("bodyHtml"),
+        "body_html": product.get("descriptionHtml", product.get("bodyHtml")),
         "vendor": product.get("vendor"),
         "product_type": product.get("productType"),
         "handle": product.get("handle"),
@@ -243,7 +244,7 @@ def transform_product(product: dict, shop_url: str) -> tuple[dict, list[dict]]:
         "image": image_jsonb,
         "images": images_jsonb,
         "total_inventory": product.get("totalInventory"),
-        "total_variants": product.get("totalVariants"),
+        "total_variants": len(raw_variants),  # totalVariants removed in 2026-01, compute from variants list
         **_airbyte_columns(),
     }
 
@@ -257,6 +258,14 @@ def transform_customer(customer: dict, shop_url: str) -> dict:
     """Transform a GraphQL Customer node → customer_row for our `customers` table."""
     cid = extract_gid(customer.get("id"))
     gql_id = customer.get("id")
+
+    # Email — 2026-01: `email` deprecated → use `defaultEmailAddress.emailAddress`
+    default_email_obj = customer.get("defaultEmailAddress") or {}
+    email = default_email_obj.get("emailAddress") or customer.get("email")
+
+    # Phone — 2026-01: `phone` deprecated → use `defaultPhoneNumber.phoneNumber`
+    default_phone_obj = customer.get("defaultPhoneNumber") or {}
+    phone = default_phone_obj.get("phoneNumber") or customer.get("phone")
 
     # Amount spent
     amount_spent = customer.get("amountSpent", {})
@@ -274,41 +283,58 @@ def transform_customer(customer: dict, shop_url: str) -> dict:
     if default_addr:
         default_address_jsonb = _transform_address(default_addr)
 
-    # All addresses
+    # All addresses — 2026-01: `addresses` deprecated → `addressesV2` (connection)
+    raw_addresses_v2 = customer.get("addressesV2")
     raw_addresses = customer.get("addresses", [])
-    addresses_jsonb = [_transform_address(a) for a in raw_addresses] if raw_addresses else []
+    if raw_addresses_v2:
+        addresses_list = _edges_to_list(raw_addresses_v2) if isinstance(raw_addresses_v2, dict) else raw_addresses_v2
+    else:
+        addresses_list = raw_addresses or []
+    addresses_jsonb = [_transform_address(a) for a in addresses_list] if addresses_list else []
 
-    # Email marketing consent
+    # Email marketing consent — 2026-01: derived from defaultEmailAddress
+    email_marketing_state = default_email_obj.get("marketingState")
+    email_opt_in_level = default_email_obj.get("marketingOptInLevel")
+    # Fallback to deprecated emailMarketingConsent if present
     emc = customer.get("emailMarketingConsent")
+    if not email_marketing_state and emc:
+        email_marketing_state = emc.get("marketingState")
+        email_opt_in_level = emc.get("marketingOptInLevel")
+
     email_marketing_consent = None
-    if emc:
+    if email_marketing_state:
         email_marketing_consent = {
-            "state": emc.get("marketingState", "").lower() if emc.get("marketingState") else None,
-            "opt_in_level": emc.get("marketingOptInLevel"),
-            "consent_updated_at": emc.get("consentUpdatedAt"),
+            "state": email_marketing_state.lower() if email_marketing_state else None,
+            "opt_in_level": email_opt_in_level,
+            "consent_updated_at": emc.get("consentUpdatedAt") if emc else None,
         }
 
-    # SMS marketing consent
+    # SMS marketing consent — 2026-01: derived from defaultPhoneNumber
+    sms_marketing_state = default_phone_obj.get("marketingState")
+    sms_opt_in_level = default_phone_obj.get("marketingOptInLevel")
+    # Fallback to deprecated smsMarketingConsent if present
     smc = customer.get("smsMarketingConsent")
+    if not sms_marketing_state and smc:
+        sms_marketing_state = smc.get("marketingState")
+        sms_opt_in_level = smc.get("marketingOptInLevel")
+
     sms_marketing_consent = None
-    if smc:
+    if sms_marketing_state:
         sms_marketing_consent = {
-            "state": smc.get("marketingState", "").lower() if smc.get("marketingState") else None,
-            "opt_in_level": smc.get("marketingOptInLevel"),
-            "consent_updated_at": smc.get("consentUpdatedAt"),
+            "state": sms_marketing_state.lower() if sms_marketing_state else None,
+            "opt_in_level": sms_opt_in_level,
+            "consent_updated_at": smc.get("consentUpdatedAt") if smc else None,
         }
 
     # Accepts marketing (derived from email consent state)
-    accepts_marketing = False
-    if emc and emc.get("marketingState") in ("SUBSCRIBED",):
-        accepts_marketing = True
+    accepts_marketing = email_marketing_state in ("SUBSCRIBED",) if email_marketing_state else False
 
     return {
         "id": cid,
-        "email": customer.get("email"),
+        "email": email,
         "first_name": customer.get("firstName"),
         "last_name": customer.get("lastName"),
-        "phone": customer.get("phone"),
+        "phone": phone,
         "state": customer.get("state", "").lower() if customer.get("state") else None,
         "tags": ", ".join(customer.get("tags", [])) if isinstance(customer.get("tags"), list) else customer.get("tags"),
         "currency": currency,
@@ -318,7 +344,7 @@ def transform_customer(customer: dict, shop_url: str) -> dict:
         "tax_exemptions": ", ".join(customer.get("taxExemptions", [])) if customer.get("taxExemptions") else None,
         "accepts_marketing": accepts_marketing,
         "accepts_marketing_updated_at": emc.get("consentUpdatedAt") if emc else None,
-        "marketing_opt_in_level": emc.get("marketingOptInLevel") if emc else None,
+        "marketing_opt_in_level": email_opt_in_level,
         "orders_count": customer.get("numberOfOrders"),
         "total_spent": total_spent,
         "last_order_id": last_order_id,
@@ -370,14 +396,8 @@ def transform_order(order: dict, shop_url: str) -> tuple[dict, list[dict]]:
     oid = extract_gid(order.get("id"))
     gql_id = order.get("id")
 
-    # Source name from channelInformation
-    source_info = order.get("sourceName")
-    source_name = None
-    if isinstance(source_info, dict):
-        cd = source_info.get("channelDefinition", {})
-        source_name = cd.get("handle") if cd else None
-    elif isinstance(source_info, str):
-        source_name = source_info
+    # Source name — now a direct scalar field on Order in 2026-01
+    source_name = order.get("sourceName")
 
     # Financial / fulfillment status — GraphQL returns UPPERCASE
     financial_status = order.get("financialStatus", "")
@@ -390,16 +410,16 @@ def transform_order(order: dict, shop_url: str) -> tuple[dict, list[dict]]:
         if fulfillment_status == "unfulfilled":
             fulfillment_status = None  # Match Shopify REST convention
 
-    # Customer JSONB
+    # Customer JSONB — email/phone deprecated on Customer in 2026-01, use order-level email/phone
     raw_customer = order.get("customer")
     customer_jsonb = None
     if raw_customer:
         customer_jsonb = {
             "id": extract_gid(raw_customer.get("id")),
-            "email": raw_customer.get("email"),
+            "email": order.get("email"),  # Order still has email
             "first_name": raw_customer.get("firstName"),
             "last_name": raw_customer.get("lastName"),
-            "phone": raw_customer.get("phone"),
+            "phone": order.get("phone"),  # Order still has phone
         }
 
     # Addresses
@@ -423,8 +443,8 @@ def transform_order(order: dict, shop_url: str) -> tuple[dict, list[dict]]:
         sl_nodes = _edges_to_list(raw_shipping)
         shipping_lines = _transform_shipping_lines(sl_nodes)
 
-    # Tax lines
-    raw_tax_lines = order.get("taxLines", [])
+    # Tax lines (currentTaxLines in 2026-01)
+    raw_tax_lines = order.get("currentTaxLines", order.get("taxLines", []))
     tax_lines = _transform_tax_lines(raw_tax_lines)
 
     # Line items
@@ -443,13 +463,21 @@ def transform_order(order: dict, shop_url: str) -> tuple[dict, list[dict]]:
         refund_rows.append(refund_row)
         refunds_jsonb.append(refund_embedded)
 
-    # Money fields
+    # Money fields — 2026-01 renames:
+    #   currency → currencyCode
+    #   orderNumber → number
+    #   buyerAcceptsMarketing → customerAcceptsMarketing
+    #   totalWeight → currentTotalWeight
+    #   subtotalPriceSet/totalPriceSet/totalDiscountsSet/totalTaxSet → removed, use current* or original*
+    #   totalShippingPriceSet → currentShippingPriceSet
+    #   taxLines → currentTaxLines
+    #   test, taxExempt, taxesIncluded → removed from Order
     order_row = {
         "id": oid,
         "admin_graphql_api_id": gql_id,
         "app_id": None,
         "browser_ip": None,
-        "buyer_accepts_marketing": order.get("buyerAcceptsMarketing"),
+        "buyer_accepts_marketing": order.get("customerAcceptsMarketing"),
         "cancel_reason": order.get("cancelReason", "").lower() if order.get("cancelReason") else None,
         "cancelled_at": order.get("cancelledAt"),
         "cart_token": None,
@@ -460,7 +488,7 @@ def transform_order(order: dict, shop_url: str) -> tuple[dict, list[dict]]:
         "confirmation_number": None,
         "contact_email": order.get("email"),
         "created_at": order.get("createdAt"),
-        "currency": order.get("currency"),
+        "currency": order.get("currencyCode"),
         "current_subtotal_price": _money_amount(order.get("currentSubtotalPriceSet")),
         "current_subtotal_price_set": _money_set(order.get("currentSubtotalPriceSet")),
         "current_total_discounts": _money_amount(order.get("currentTotalDiscountsSet")),
@@ -479,35 +507,35 @@ def transform_order(order: dict, shop_url: str) -> tuple[dict, list[dict]]:
         "name": order.get("name"),
         "note": order.get("note"),
         "note_attributes": None,
-        "number": None,
-        "order_number": order.get("orderNumber"),
+        "number": order.get("number"),
+        "order_number": order.get("number"),
         "order_status_url": None,
         "payment_gateway_names": None,
         "phone": order.get("phone"),
         "presentment_currency": order.get("presentmentCurrencyCode"),
         "processed_at": order.get("processedAt"),
         "source_name": source_name,
-        "subtotal_price": _money_amount(order.get("subtotalPriceSet")),
-        "subtotal_price_set": _money_set(order.get("subtotalPriceSet")),
+        "subtotal_price": _money_amount(order.get("currentSubtotalPriceSet")),
+        "subtotal_price_set": _money_set(order.get("currentSubtotalPriceSet")),
         "tags": ", ".join(order.get("tags", [])) if isinstance(order.get("tags"), list) else order.get("tags", ""),
-        "tax_exempt": order.get("taxExempt"),
+        "tax_exempt": None,  # Removed from Order in 2026-01
         "tax_lines": tax_lines,
-        "taxes_included": order.get("taxesIncluded"),
-        "test": order.get("test"),
+        "taxes_included": order.get("estimatedTaxes"),
+        "test": None,  # Removed from Order in 2026-01
         "token": None,
-        "total_discounts": _money_amount(order.get("totalDiscountsSet")),
-        "total_discounts_set": _money_set(order.get("totalDiscountsSet")),
+        "total_discounts": _money_amount(order.get("currentTotalDiscountsSet")),
+        "total_discounts_set": _money_set(order.get("currentTotalDiscountsSet")),
         "total_line_items_price": None,
         "total_line_items_price_set": None,
         "total_outstanding": None,
-        "total_price": _money_amount(order.get("totalPriceSet")),
-        "total_price_set": _money_set(order.get("totalPriceSet")),
+        "total_price": _money_amount(order.get("originalTotalPriceSet")),
+        "total_price_set": _money_set(order.get("originalTotalPriceSet")),
         "total_price_usd": None,
-        "total_shipping_price_set": _money_set(order.get("totalShippingPriceSet")),
-        "total_tax": _money_amount(order.get("totalTaxSet")),
-        "total_tax_set": _money_set(order.get("totalTaxSet")),
+        "total_shipping_price_set": _money_set(order.get("currentShippingPriceSet")),
+        "total_tax": _money_amount(order.get("currentTotalTaxSet")),
+        "total_tax_set": _money_set(order.get("currentTotalTaxSet")),
         "total_tip_received": "0.00",
-        "total_weight": order.get("totalWeight"),
+        "total_weight": order.get("currentTotalWeight"),
         "updated_at": order.get("updatedAt"),
         "customer": customer_jsonb,
         "billing_address": billing_address,
