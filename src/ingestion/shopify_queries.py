@@ -115,45 +115,158 @@ _ORDER_FIELDS = """
         }
       }}
     }
-    refunds(first: 10) {
+    refunds {
+      id
+      createdAt
+      note
+      refundLineItems(first: 50) {
+        edges { node {
+          quantity
+          subtotalSet { MONEY_FIELDS }
+          totalTaxSet { MONEY_FIELDS }
+          restockType
+          lineItem {
+            id
+            name
+            title
+            variantTitle
+            sku
+            vendor
+            quantity
+            originalUnitPriceSet { MONEY_FIELDS }
+            variant {
+              id
+              product { id }
+            }
+          }
+        }}
+      }
+      totalRefundedSet { MONEY_FIELDS }
+      transactions(first: 10) {
+        edges { node {
+          id
+          kind
+          status
+          gateway
+          amountSet { MONEY_FIELDS }
+          processedAt
+        }}
+      }
+    }
+""".replace("MONEY_FIELDS", _MONEY_FIELDS)
+
+
+_ORDER_FIELDS_BULK = """
+    id
+    name
+    email
+    phone
+    createdAt
+    updatedAt
+    cancelledAt
+    closedAt
+    processedAt
+    currencyCode
+    presentmentCurrencyCode
+    confirmed
+    cancelReason
+    tags
+    note
+    sourceIdentifier
+    sourceName
+    financialStatus: displayFinancialStatus
+    fulfillmentStatus: displayFulfillmentStatus
+    customerLocale
+    number
+    customerAcceptsMarketing
+    originalTotalPriceSet { MONEY_FIELDS }
+    currentSubtotalPriceSet { MONEY_FIELDS }
+    currentTotalDiscountsSet { MONEY_FIELDS }
+    currentTotalPriceSet { MONEY_FIELDS }
+    currentTotalTaxSet { MONEY_FIELDS }
+    currentShippingPriceSet { MONEY_FIELDS }
+    currentTotalWeight
+    estimatedTaxes
+    billingAddress {
+      firstName lastName company
+      address1 address2 city
+      province provinceCode
+      country countryCodeV2
+      zip phone
+    }
+    shippingAddress {
+      firstName lastName company
+      address1 address2 city
+      province provinceCode
+      country countryCodeV2
+      zip phone
+    }
+    customer {
+      id firstName lastName
+    }
+    discountCodes
+    currentTaxLines {
+      title rate ratePercentage
+      priceSet { MONEY_FIELDS }
+    }
+    lineItems(first: 50) {
       edges { node {
         id
-        createdAt
-        note
-        refundLineItems(first: 50) {
-          edges { node {
-            quantity
-            subtotalSet { MONEY_FIELDS }
-            totalTaxSet { MONEY_FIELDS }
-            restockType
-            lineItem {
-              id
-              name
-              title
-              variantTitle
-              sku
-              vendor
-              quantity
-              originalUnitPriceSet { MONEY_FIELDS }
-              variant {
-                id
-                product { id }
-              }
-            }
-          }}
-        }
-        totalRefundedSet { MONEY_FIELDS }
-        transactions(first: 10) {
-          edges { node {
-            id
-            kind
-            status
-            gateway
-            amountSet { MONEY_FIELDS }
-            processedAt
-          }}
+        name
+        title
+        variantTitle
+        quantity
+        sku
+        vendor
+        taxable
+        isGiftCard
+        requiresShipping
+        originalUnitPriceSet { MONEY_FIELDS }
+        discountedUnitPriceSet { MONEY_FIELDS }
+        totalDiscountSet { MONEY_FIELDS }
+        variant {
+          id
+          product { id }
         }
       }}
+    }
+    refunds(first: 10) {
+      id
+      createdAt
+      note
+      refundLineItems(first: 50) {
+        edges { node {
+          quantity
+          subtotalSet { MONEY_FIELDS }
+          totalTaxSet { MONEY_FIELDS }
+          restockType
+          lineItem {
+            id
+            name
+            title
+            variantTitle
+            sku
+            vendor
+            quantity
+            originalUnitPriceSet { MONEY_FIELDS }
+            variant {
+              id
+              product { id }
+            }
+          }
+        }}
+      }
+      totalRefundedSet { MONEY_FIELDS }
+      transactions(first: 10) {
+        edges { node {
+          id
+          kind
+          status
+          gateway
+          amountSet { MONEY_FIELDS }
+          processedAt
+        }}
+      }
     }
 """.replace("MONEY_FIELDS", _MONEY_FIELDS)
 
@@ -233,44 +346,10 @@ _ORDER_FIELDS_BULK = """
       }}
     }
     refunds {
-      edges { node {
-        id
-        createdAt
-        note
-        refundLineItems {
-          edges { node {
-            quantity
-            subtotalSet { MONEY_FIELDS }
-            totalTaxSet { MONEY_FIELDS }
-            restockType
-            lineItem {
-              id
-              name
-              title
-              variantTitle
-              sku
-              vendor
-              quantity
-              originalUnitPriceSet { MONEY_FIELDS }
-              variant {
-                id
-                product { id }
-              }
-            }
-          }}
-        }
-        totalRefundedSet { MONEY_FIELDS }
-        transactions {
-          edges { node {
-            id
-            kind
-            status
-            gateway
-            amountSet { MONEY_FIELDS }
-            processedAt
-          }}
-        }
-      }}
+      id
+      createdAt
+      note
+      totalRefundedSet { MONEY_FIELDS }
     }
 """.replace("MONEY_FIELDS", _MONEY_FIELDS)
 

@@ -220,18 +220,52 @@ def _truncate_shopify_tables(conn, schema: str) -> None:
     logger.info(f"Truncated Shopify tables in {schema}")
 
 
+def _backfill_refunds(conn, tenant_id: int, store_url: str) -> int:
+    """
+    Backfill detailed refund data using paginated API.
+    
+    Bulk API cannot fetch nested refund line items/transactions due to limitations.
+    We fetch all refunded/partially_refunded orders via standard API to fill gaps.
+    """
+    logger.info("Backfilling refund details via paginated API...")
+    schema = f"raw_tenant_{tenant_id}"
+    query_filter = "financial_status:refunded OR financial_status:partially_refunded"
+    
+    total_orders = 0
+    with ShopifyClient(store_url=store_url) as client:
+        order_rows, refund_rows = [], []
+        
+        # Reuse ORDERS_PAGINATED which fetches full details
+        for page in client.paginate(ORDERS_PAGINATED, "orders", query_filter=query_filter):
+            for node in page:
+                o_row, r_rows = transform_order(node, store_url)
+                order_rows.append(o_row)
+                refund_rows.extend(r_rows)
+            
+            # Flush batch
+            if order_rows:
+                _upsert_orders(conn, schema, order_rows)
+                _upsert_refunds(conn, schema, refund_rows)
+                total_orders += len(order_rows)
+                order_rows, refund_rows = [], []
+                
+    logger.info(f"Backfilled {total_orders} refunded orders with full details")
+    return total_orders
+
+
 # ─── Full Sync (Bulk Operations) ────────────────────────
 
 
 def full_sync(tenant_id: int, db_url: str | None = None) -> dict:
     """
     Full sync via Shopify Bulk Operations API.
-
+    
     Steps:
       1. Submit bulk queries for products, customers, orders
       2. Poll until complete
       3. Download and stream-parse JSONL files
       4. Transform and insert into raw tables (after truncating)
+      5. Backfill detailed refund data via paginated API (workaround for Bulk API limits)
 
     Returns a summary dict with record counts.
     """
@@ -329,6 +363,7 @@ def full_sync(tenant_id: int, db_url: str | None = None) -> dict:
             mark_sync_started(conn, tenant_id, "orders")
             try:
                 logger.info("Bulk syncing orders...")
+                # Bulk query (lean refunds)
                 jsonl_path = bulk.execute_bulk_query(ORDERS_BULK, query_filter="")
 
                 order_rows = []
@@ -360,11 +395,16 @@ def full_sync(tenant_id: int, db_url: str | None = None) -> dict:
 
                 _upsert_orders(conn, schema, order_rows)
                 _upsert_refunds(conn, schema, refund_rows)
+                
+                # Backfill detailed refund data
+                backfilled_count = _backfill_refunds(conn, tenant_id, store_url)
+                
                 mark_sync_completed(conn, tenant_id, "orders", len(order_rows), sync_start)
                 mark_sync_started(conn, tenant_id, "order_refunds")
                 mark_sync_completed(conn, tenant_id, "order_refunds", len(refund_rows), sync_start)
                 summary["orders"] = len(order_rows)
                 summary["order_refunds"] = len(refund_rows)
+                summary["backfilled_refund_orders"] = backfilled_count
                 logger.info(f"Orders: {len(order_rows)}, Refunds: {len(refund_rows)}")
 
                 jsonl_path.unlink(missing_ok=True)
