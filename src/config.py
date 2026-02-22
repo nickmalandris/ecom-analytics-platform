@@ -18,8 +18,7 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     google_api_key: str = ""
 
-    # Shopify
-    shopify_access_token: str = ""
+    # Shopify (client credentials — tokens auto-refresh every 24h)
     shopify_client_id: str = ""
     shopify_secret_key: str = ""
     shopify_store_url: str = ""

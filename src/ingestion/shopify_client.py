@@ -2,10 +2,10 @@
 Shopify GraphQL Admin API client.
 
 Handles:
-  - Authentication (direct token or client credentials grant)
+  - Authentication via client credentials grant (auto-refresh on expiry)
   - Cost-based rate limiting (leaky bucket, 1000 point max, 50 pts/sec restore)
   - Cursor-based pagination for incremental syncs
-  - Retry with exponential backoff on throttle/5xx errors
+  - Retry with exponential backoff on throttle/5xx/401 errors
 """
 
 import logging
@@ -27,6 +27,9 @@ THROTTLE_THRESHOLD = 100
 MAX_RETRIES = 3
 RETRY_BASE_DELAY = 1.0  # seconds
 
+# Refresh the token 5 minutes before it actually expires
+TOKEN_EXPIRY_BUFFER_SECONDS = 300
+
 
 class ShopifyClientError(Exception):
     """Raised for Shopify API errors."""
@@ -45,10 +48,11 @@ class ShopifyClient:
     """
     Synchronous GraphQL client for the Shopify Admin API.
 
-    Auth priority:
-      1. Explicit access_token parameter
-      2. SHOPIFY_ACCESS_TOKEN env var
-      3. Client credentials grant (SHOPIFY_CLIENT_ID + SHOPIFY_SECRET_KEY)
+    Auth: Uses client credentials grant (SHOPIFY_CLIENT_ID + SHOPIFY_SECRET_KEY)
+    to obtain short-lived access tokens that are automatically refreshed
+    before each request when expired or nearing expiry.
+
+    If an explicit access_token is passed, it is used as-is (no auto-refresh).
     """
 
     def __init__(
@@ -64,11 +68,27 @@ class ShopifyClient:
                 "Set SHOPIFY_STORE_URL or pass store_url parameter."
             )
 
-        self.access_token = access_token or self._resolve_access_token()
-        if not self.access_token:
+        # Token state
+        self._token: str | None = None
+        self._token_expires_at: float = 0.0  # epoch timestamp
+        self._static_token: bool = False  # True if explicit token, no refresh
+
+        # Client credentials for auto-refresh
+        self._client_id = os.getenv("SHOPIFY_CLIENT_ID", "").strip()
+        self._client_secret = os.getenv("SHOPIFY_SECRET_KEY", "").strip()
+
+        if access_token:
+            # Explicit token — use as-is, no auto-refresh
+            self._token = access_token
+            self._static_token = True
+            logger.debug("Using explicit access token (no auto-refresh)")
+        elif self._client_id and self._client_secret:
+            # Obtain initial token via client credentials
+            self._refresh_token()
+        else:
             raise ShopifyClientError(
-                "No Shopify access token available. "
-                "Set SHOPIFY_ACCESS_TOKEN or SHOPIFY_CLIENT_ID + SHOPIFY_SECRET_KEY."
+                "No Shopify credentials configured. "
+                "Set SHOPIFY_CLIENT_ID + SHOPIFY_SECRET_KEY in .env."
             )
 
         self.graphql_url = (
@@ -76,10 +96,7 @@ class ShopifyClient:
         )
         self._http = httpx.Client(
             timeout=60.0,
-            headers={
-                "Content-Type": "application/json",
-                "X-Shopify-Access-Token": self.access_token,
-            },
+            headers={"Content-Type": "application/json"},
         )
         self._available_points: float = 1000.0
         self._restore_rate: float = 50.0
@@ -98,29 +115,15 @@ class ShopifyClient:
         url = url.split("/")[0]
         return url
 
-    def _resolve_access_token(self) -> str | None:
-        """Resolve access token: env var first, then client credentials grant."""
-        token = os.getenv("SHOPIFY_ACCESS_TOKEN", "").strip()
-        if token:
-            logger.debug("Using SHOPIFY_ACCESS_TOKEN from env")
-            return token
-
-        # Try client credentials grant
-        client_id = os.getenv("SHOPIFY_CLIENT_ID", "").strip()
-        client_secret = os.getenv("SHOPIFY_SECRET_KEY", "").strip()
-        if client_id and client_secret:
-            return self._obtain_token_via_client_credentials(client_id, client_secret)
-
-        return None
-
-    def _obtain_token_via_client_credentials(
-        self, client_id: str, client_secret: str
-    ) -> str | None:
+    def _refresh_token(self) -> None:
         """
-        Exchange client credentials for an access token.
+        Obtain a fresh access token via client credentials grant.
 
         POST https://{store}/admin/oauth/access_token
         grant_type=client_credentials&client_id=...&client_secret=...
+
+        Tokens expire in 86399 seconds (24 hours). We store the expiry
+        timestamp and refresh proactively before it expires.
         """
         url = f"https://{self.store_domain}/admin/oauth/access_token"
         logger.info(f"Obtaining access token via client credentials for {self.store_domain}")
@@ -130,8 +133,8 @@ class ShopifyClient:
                 url,
                 data={
                     "grant_type": "client_credentials",
-                    "client_id": client_id,
-                    "client_secret": client_secret,
+                    "client_id": self._client_id,
+                    "client_secret": self._client_secret,
                 },
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
                 timeout=30.0,
@@ -139,17 +142,44 @@ class ShopifyClient:
             resp.raise_for_status()
             data = resp.json()
             token = data.get("access_token")
-            if token:
-                logger.info("Access token obtained via client credentials")
-                return token
-            logger.error(f"No access_token in response: {data}")
-            return None
+            expires_in = data.get("expires_in", 86399)
+
+            if not token:
+                raise ShopifyClientError(
+                    f"No access_token in client credentials response: {data}"
+                )
+
+            self._token = token
+            self._token_expires_at = time.time() + expires_in - TOKEN_EXPIRY_BUFFER_SECONDS
+            logger.info(
+                f"Access token obtained, expires in {expires_in}s "
+                f"(will refresh in {expires_in - TOKEN_EXPIRY_BUFFER_SECONDS}s)"
+            )
+
         except httpx.HTTPStatusError as e:
-            logger.error(f"Client credentials grant failed: {e.response.status_code} {e.response.text}")
-            return None
+            raise ShopifyClientError(
+                f"Client credentials grant failed: {e.response.status_code} {e.response.text}"
+            )
+        except ShopifyClientError:
+            raise
         except Exception as e:
-            logger.error(f"Client credentials grant failed: {e}")
-            return None
+            raise ShopifyClientError(f"Client credentials grant failed: {e}")
+
+    def _get_token(self) -> str:
+        """
+        Return a valid access token, refreshing if needed.
+
+        For static tokens (explicit access_token), returns as-is.
+        For client credentials tokens, checks expiry and refreshes if stale.
+        """
+        if self._static_token:
+            return self._token  # type: ignore
+
+        if time.time() >= self._token_expires_at:
+            logger.info("Access token expired or nearing expiry, refreshing...")
+            self._refresh_token()
+
+        return self._token  # type: ignore
 
     def _handle_throttle(self, extensions: dict) -> None:
         """
@@ -182,6 +212,9 @@ class ShopifyClient:
         """
         Execute a GraphQL query/mutation with retry and throttle handling.
 
+        Injects a fresh access token into each request. On 401, forces a
+        token refresh and retries once before counting it as a failure.
+
         Returns the `data` portion of the response.
         Raises ShopifyClientError on unrecoverable errors.
         """
@@ -190,16 +223,37 @@ class ShopifyClient:
             payload["variables"] = variables
 
         last_error: Exception | None = None
+        token_refreshed_this_cycle = False
 
         for attempt in range(MAX_RETRIES):
+            # Get a valid token for this request
+            token = self._get_token()
+
             try:
-                resp = self._http.post(self.graphql_url, json=payload)
+                resp = self._http.post(
+                    self.graphql_url,
+                    json=payload,
+                    headers={"X-Shopify-Access-Token": token},
+                )
             except httpx.HTTPError as e:
                 last_error = e
                 delay = RETRY_BASE_DELAY * (2 ** attempt)
                 logger.warning(f"HTTP error (attempt {attempt + 1}): {e}, retrying in {delay}s")
                 time.sleep(delay)
                 continue
+
+            # Handle 401 — token may have expired mid-sync
+            if resp.status_code == 401:
+                if not self._static_token and not token_refreshed_this_cycle:
+                    logger.warning("Got 401 Unauthorized, refreshing access token...")
+                    self._refresh_token()
+                    token_refreshed_this_cycle = True
+                    continue  # Retry with fresh token (don't increment backoff)
+                else:
+                    raise ShopifyClientError(
+                        f"401 Unauthorized — access token rejected. "
+                        f"Check your SHOPIFY_CLIENT_ID and SHOPIFY_SECRET_KEY."
+                    )
 
             if resp.status_code == 429:
                 delay = RETRY_BASE_DELAY * (2 ** attempt)
