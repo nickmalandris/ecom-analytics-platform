@@ -1,10 +1,10 @@
 -- Mart: Product Performance
 -- Aggregates sales and refund metrics by product by day.
--- Source: {analytics_schema}.stg_shopify_order_lines, {analytics_schema}.stg_shopify_refunds
+-- Source: {schema}.stg_shopify_order_lines, {schema}.stg_shopify_refunds
 
-DROP MATERIALIZED VIEW IF EXISTS {analytics_schema}.mart_product_performance CASCADE;
+DROP MATERIALIZED VIEW IF EXISTS {schema}.mart_product_performance CASCADE;
 
-CREATE MATERIALIZED VIEW {analytics_schema}.mart_product_performance AS
+CREATE MATERIALIZED VIEW {schema}.mart_product_performance AS
 
 WITH daily_product_sales AS (
     SELECT
@@ -19,7 +19,7 @@ WITH daily_product_sales AS (
         COUNT(DISTINCT ol.order_id)                     AS order_count,
         COUNT(DISTINCT ol.customer_id)                  AS unique_customers,
         ROUND(AVG(ol.unit_price), 2)                    AS avg_selling_price
-    FROM {analytics_schema}.stg_shopify_order_lines ol
+    FROM {schema}.stg_shopify_order_lines ol
     GROUP BY ol.order_date, ol.product_id, ol.product_title, ol.vendor
 ),
 
@@ -30,7 +30,7 @@ daily_product_refunds AS (
         SUM(r.refund_quantity)                          AS refund_units,
         SUM(r.refund_total)                             AS refund_amount,
         COUNT(DISTINCT r.refund_id)                     AS refund_count
-    FROM {analytics_schema}.stg_shopify_refunds r
+    FROM {schema}.stg_shopify_refunds r
     GROUP BY r.refund_date, r.product_id
 )
 

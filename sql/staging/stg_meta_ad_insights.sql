@@ -1,10 +1,10 @@
 -- Staging: Meta Ads Insights
 -- Extracts key metrics from JSONB action arrays into flat columns.
--- Source: {raw_schema}.ads_insights
+-- Source: {schema}.ads_insights
 
-DROP MATERIALIZED VIEW IF EXISTS {analytics_schema}.stg_meta_ad_insights CASCADE;
+DROP MATERIALIZED VIEW IF EXISTS {schema}.stg_meta_ad_insights CASCADE;
 
-CREATE MATERIALIZED VIEW {analytics_schema}.stg_meta_ad_insights AS
+CREATE MATERIALIZED VIEW {schema}.stg_meta_ad_insights AS
 
 WITH raw_insights AS (
     SELECT
@@ -43,7 +43,7 @@ WITH raw_insights AS (
         ai.action_values,
         ai.cost_per_action_type,
         ai.purchase_roas
-    FROM {raw_schema}.ads_insights ai
+    FROM {schema}.ads_insights ai
 ),
 
 -- Extract specific action types from JSONB arrays

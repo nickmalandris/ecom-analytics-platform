@@ -1,10 +1,10 @@
 -- Mart: Daily Revenue
 -- Aggregates Shopify revenue metrics by day.
--- Source: {analytics_schema}.stg_shopify_orders
+-- Source: {schema}.stg_shopify_orders
 
-DROP MATERIALIZED VIEW IF EXISTS {analytics_schema}.mart_daily_revenue CASCADE;
+DROP MATERIALIZED VIEW IF EXISTS {schema}.mart_daily_revenue CASCADE;
 
-CREATE MATERIALIZED VIEW {analytics_schema}.mart_daily_revenue AS
+CREATE MATERIALIZED VIEW {schema}.mart_daily_revenue AS
 
 SELECT
     o.order_date,
@@ -34,7 +34,7 @@ SELECT
     COUNT(DISTINCT o.order_id) FILTER (
         WHERE o.fulfillment_status IS NULL
     )                                                   AS unfulfilled_orders
-FROM {analytics_schema}.stg_shopify_orders o
+FROM {schema}.stg_shopify_orders o
 WHERE o.financial_status NOT IN ('refunded', 'voided')
    OR o.financial_status = 'partially_refunded'
 GROUP BY o.order_date

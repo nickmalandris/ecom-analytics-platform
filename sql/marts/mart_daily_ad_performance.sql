@@ -1,10 +1,10 @@
 -- Mart: Daily Ad Performance
 -- Aggregates Meta Ads metrics by day at campaign and ad set level.
--- Source: {analytics_schema}.stg_meta_ad_insights
+-- Source: {schema}.stg_meta_ad_insights
 
-DROP MATERIALIZED VIEW IF EXISTS {analytics_schema}.mart_daily_ad_performance CASCADE;
+DROP MATERIALIZED VIEW IF EXISTS {schema}.mart_daily_ad_performance CASCADE;
 
-CREATE MATERIALIZED VIEW {analytics_schema}.mart_daily_ad_performance AS
+CREATE MATERIALIZED VIEW {schema}.mart_daily_ad_performance AS
 
 SELECT
     i.insight_date,
@@ -45,7 +45,7 @@ SELECT
                                                         AS conversion_rate,
     -- Ad count
     COUNT(DISTINCT i.ad_id)                             AS active_ads
-FROM {analytics_schema}.stg_meta_ad_insights i
+FROM {schema}.stg_meta_ad_insights i
 GROUP BY
     i.insight_date,
     i.campaign_id,

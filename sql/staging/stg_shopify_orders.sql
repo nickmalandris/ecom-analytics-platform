@@ -1,10 +1,10 @@
 -- Staging: Shopify Orders
 -- Flattens orders and explodes line_items JSONB into individual rows.
--- Source: {raw_schema}.orders
+-- Source: {schema}.orders
 
-DROP MATERIALIZED VIEW IF EXISTS {analytics_schema}.stg_shopify_orders CASCADE;
+DROP MATERIALIZED VIEW IF EXISTS {schema}.stg_shopify_orders CASCADE;
 
-CREATE MATERIALIZED VIEW {analytics_schema}.stg_shopify_orders AS
+CREATE MATERIALIZED VIEW {schema}.stg_shopify_orders AS
 
 WITH orders_base AS (
     SELECT
@@ -42,10 +42,8 @@ WITH orders_base AS (
         o.shipping_address->>'zip'                      AS shipping_zip,
         o.line_items,
         o.cancel_reason,
-        o.tags,
-        o.test
-    FROM {raw_schema}.orders o
-    WHERE o.test = FALSE
+        o.tags
+    FROM {schema}.orders o
 ),
 
 line_items_exploded AS (
@@ -119,9 +117,9 @@ SELECT
 FROM orders_base ob;
 
 -- Also create the line-item level view for product analysis
-DROP MATERIALIZED VIEW IF EXISTS {analytics_schema}.stg_shopify_order_lines CASCADE;
+DROP MATERIALIZED VIEW IF EXISTS {schema}.stg_shopify_order_lines CASCADE;
 
-CREATE MATERIALIZED VIEW {analytics_schema}.stg_shopify_order_lines AS
+CREATE MATERIALIZED VIEW {schema}.stg_shopify_order_lines AS
 SELECT
     o.id                                                AS order_id,
     DATE(o.created_at)                                  AS order_date,
@@ -145,6 +143,5 @@ SELECT
     (li->>'taxable')::BOOLEAN                           AS taxable,
     (li->>'requires_shipping')::BOOLEAN                 AS requires_shipping,
     (li->>'gift_card')::BOOLEAN                         AS is_gift_card
-FROM {raw_schema}.orders o,
-     jsonb_array_elements(o.line_items) AS li
-WHERE o.test = FALSE;
+FROM {schema}.orders o,
+     jsonb_array_elements(o.line_items) AS li;

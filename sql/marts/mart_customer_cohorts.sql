@@ -1,17 +1,17 @@
 -- Mart: Customer Cohorts
 -- Tracks new vs returning customer metrics by day.
--- Source: {analytics_schema}.stg_shopify_orders, {analytics_schema}.stg_shopify_customers
+-- Source: {schema}.stg_shopify_orders, {schema}.stg_shopify_customers
 
-DROP MATERIALIZED VIEW IF EXISTS {analytics_schema}.mart_customer_cohorts CASCADE;
+DROP MATERIALIZED VIEW IF EXISTS {schema}.mart_customer_cohorts CASCADE;
 
-CREATE MATERIALIZED VIEW {analytics_schema}.mart_customer_cohorts AS
+CREATE MATERIALIZED VIEW {schema}.mart_customer_cohorts AS
 
 WITH customer_first_order AS (
     -- Find each customer's first order date
     SELECT
         customer_id,
         MIN(order_date)                                 AS first_order_date
-    FROM {analytics_schema}.stg_shopify_orders
+    FROM {schema}.stg_shopify_orders
     GROUP BY customer_id
 ),
 
@@ -26,7 +26,7 @@ orders_with_cohort AS (
             WHEN o.order_date = cfo.first_order_date THEN 'new'
             ELSE 'returning'
         END                                             AS customer_type
-    FROM {analytics_schema}.stg_shopify_orders o
+    FROM {schema}.stg_shopify_orders o
     JOIN customer_first_order cfo ON o.customer_id = cfo.customer_id
 )
 

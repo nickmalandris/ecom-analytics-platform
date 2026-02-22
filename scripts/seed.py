@@ -35,7 +35,7 @@ def parse_args():
 
 
 # ──────────────────────────────────────────────
-# DDL: Table definitions matching Airbyte output
+# DDL: Table definitions
 # ──────────────────────────────────────────────
 
 TENANT_TABLE_DDL = """
@@ -46,8 +46,6 @@ CREATE TABLE IF NOT EXISTS public.tenants (
     meta_account_id VARCHAR(255),
     api_key VARCHAR(255) NOT NULL,
     email_recipients TEXT[],
-    airbyte_shopify_connection_id VARCHAR(255),
-    airbyte_meta_connection_id VARCHAR(255),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -75,10 +73,7 @@ CREATE TABLE IF NOT EXISTS {schema}.products (
     image JSONB,
     images JSONB,
     total_inventory INT,
-    total_variants INT,
-    _airbyte_raw_id VARCHAR(36),
-    _airbyte_extracted_at TIMESTAMPTZ,
-    _airbyte_meta JSONB
+    total_variants INT
 );
 """
 
@@ -112,10 +107,7 @@ CREATE TABLE IF NOT EXISTS {schema}.product_variants (
     admin_graphql_api_id TEXT,
     created_at TIMESTAMPTZ,
     updated_at TIMESTAMPTZ,
-    shop_url TEXT,
-    _airbyte_raw_id VARCHAR(36),
-    _airbyte_extracted_at TIMESTAMPTZ,
-    _airbyte_meta JSONB
+    shop_url TEXT
 );
 """
 
@@ -147,10 +139,7 @@ CREATE TABLE IF NOT EXISTS {schema}.customers (
     default_address JSONB,
     addresses JSONB,
     email_marketing_consent JSONB,
-    sms_marketing_consent JSONB,
-    _airbyte_raw_id VARCHAR(36),
-    _airbyte_extracted_at TIMESTAMPTZ,
-    _airbyte_meta JSONB
+    sms_marketing_consent JSONB
 );
 """
 
@@ -227,10 +216,7 @@ CREATE TABLE IF NOT EXISTS {schema}.orders (
     line_items JSONB,
     fulfillments JSONB,
     refunds JSONB,
-    shop_url TEXT,
-    _airbyte_raw_id VARCHAR(36),
-    _airbyte_extracted_at TIMESTAMPTZ,
-    _airbyte_meta JSONB
+    shop_url TEXT
 );
 """
 
@@ -250,10 +236,7 @@ CREATE TABLE IF NOT EXISTS {schema}.order_refunds (
     total_duties_set JSONB,
     order_adjustments JSONB,
     refund_line_items JSONB,
-    transactions JSONB,
-    _airbyte_raw_id VARCHAR(36),
-    _airbyte_extracted_at TIMESTAMPTZ,
-    _airbyte_meta JSONB
+    transactions JSONB
 );
 """
 
@@ -279,10 +262,7 @@ CREATE TABLE IF NOT EXISTS {schema}.campaigns (
     special_ad_category TEXT,
     special_ad_category_country JSONB,
     adlabels JSONB,
-    issues_info JSONB,
-    _airbyte_raw_id VARCHAR(36),
-    _airbyte_extracted_at TIMESTAMPTZ,
-    _airbyte_meta JSONB
+    issues_info JSONB
 );
 """
 
@@ -307,10 +287,7 @@ CREATE TABLE IF NOT EXISTS {schema}.ad_sets (
     targeting JSONB,
     promoted_object JSONB,
     adlabels JSONB,
-    learning_stage_info JSONB,
-    _airbyte_raw_id VARCHAR(36),
-    _airbyte_extracted_at TIMESTAMPTZ,
-    _airbyte_meta JSONB
+    learning_stage_info JSONB
 );
 """
 
@@ -335,10 +312,7 @@ CREATE TABLE IF NOT EXISTS {schema}.ads (
     tracking_specs JSONB,
     conversion_specs JSONB,
     adlabels JSONB,
-    recommendations JSONB,
-    _airbyte_raw_id VARCHAR(36),
-    _airbyte_extracted_at TIMESTAMPTZ,
-    _airbyte_meta JSONB
+    recommendations JSONB
 );
 """
 
@@ -391,9 +365,6 @@ CREATE TABLE IF NOT EXISTS {schema}.ads_insights (
     outbound_clicks JSONB,
     created_time TEXT,
     updated_time TEXT,
-    _airbyte_raw_id VARCHAR(36),
-    _airbyte_extracted_at TIMESTAMPTZ,
-    _airbyte_meta JSONB,
     PRIMARY KEY (date_start, account_id, ad_id)
 );
 """
@@ -504,7 +475,6 @@ def insert_products(conn, schema: str, products: list[dict]):
         "tags", "template_suffix", "published_at", "published_scope", "created_at",
         "updated_at", "shop_url", "admin_graphql_api_id", "variants", "options",
         "image", "images", "total_inventory", "total_variants",
-        "_airbyte_raw_id", "_airbyte_extracted_at", "_airbyte_meta",
     ]
     # Strip internal meta fields
     clean_rows = [{k: v for k, v in row.items() if not k.startswith("_meta")} for row in products]
@@ -521,7 +491,6 @@ def insert_variants(conn, schema: str, variants: list[dict]):
         "old_inventory_quantity", "inventory_policy", "requires_shipping",
         "image_id", "image_src", "available_for_sale", "display_name",
         "admin_graphql_api_id", "created_at", "updated_at", "shop_url",
-        "_airbyte_raw_id", "_airbyte_extracted_at", "_airbyte_meta",
     ]
     bulk_insert(conn, schema, "product_variants", variants, columns)
     print(f"  Inserted {len(variants)} product variants")
@@ -536,7 +505,6 @@ def insert_customers(conn, schema: str, customers: list[dict]):
         "orders_count", "total_spent", "last_order_id", "last_order_name",
         "admin_graphql_api_id", "created_at", "updated_at", "shop_url",
         "default_address", "addresses", "email_marketing_consent", "sms_marketing_consent",
-        "_airbyte_raw_id", "_airbyte_extracted_at", "_airbyte_meta",
     ]
     bulk_insert(conn, schema, "customers", customers, columns)
     print(f"  Inserted {len(customers)} customers")
@@ -567,7 +535,6 @@ def insert_orders(conn, schema: str, orders: list[dict]):
         "total_tip_received", "total_weight", "updated_at",
         "customer", "billing_address", "shipping_address", "shipping_lines",
         "line_items", "fulfillments", "refunds", "shop_url",
-        "_airbyte_raw_id", "_airbyte_extracted_at", "_airbyte_meta",
     ]
     # Strip internal meta fields
     clean_rows = [{k: v for k, v in row.items() if not k.startswith("_meta")} for row in orders]
@@ -581,7 +548,6 @@ def insert_refunds(conn, schema: str, refunds: list[dict]):
         "id", "order_id", "admin_graphql_api_id", "created_at", "processed_at",
         "note", "restock", "user_id", "duties", "shop_url", "return",
         "total_duties_set", "order_adjustments", "refund_line_items", "transactions",
-        "_airbyte_raw_id", "_airbyte_extracted_at", "_airbyte_meta",
     ]
     bulk_insert(conn, schema, "order_refunds", refunds, columns)
     print(f"  Inserted {len(refunds)} refunds")
@@ -595,14 +561,8 @@ def insert_campaigns(conn, schema: str, campaigns: list[dict]):
         "budget_remaining", "spend_cap", "start_time", "stop_time", "created_time",
         "updated_time", "special_ad_category", "special_ad_category_country",
         "adlabels", "issues_info",
-        "_airbyte_raw_id", "_airbyte_extracted_at", "_airbyte_meta",
     ]
     clean_rows = [{k: v for k, v in row.items() if not k.startswith("_")} for row in campaigns]
-    # Re-add airbyte columns
-    for i, row in enumerate(campaigns):
-        clean_rows[i]["_airbyte_raw_id"] = row["_airbyte_raw_id"]
-        clean_rows[i]["_airbyte_extracted_at"] = row["_airbyte_extracted_at"]
-        clean_rows[i]["_airbyte_meta"] = row["_airbyte_meta"]
     bulk_insert(conn, schema, "campaigns", clean_rows, columns)
     print(f"  Inserted {len(campaigns)} campaigns")
 
@@ -615,13 +575,8 @@ def insert_ad_sets(conn, schema: str, ad_sets: list[dict]):
         "bid_amount", "bid_constraints", "bid_info", "start_time", "end_time",
         "created_time", "updated_time", "targeting", "promoted_object",
         "adlabels", "learning_stage_info",
-        "_airbyte_raw_id", "_airbyte_extracted_at", "_airbyte_meta",
     ]
     clean_rows = [{k: v for k, v in row.items() if not k.startswith("_")} for row in ad_sets]
-    for i, row in enumerate(ad_sets):
-        clean_rows[i]["_airbyte_raw_id"] = row["_airbyte_raw_id"]
-        clean_rows[i]["_airbyte_extracted_at"] = row["_airbyte_extracted_at"]
-        clean_rows[i]["_airbyte_meta"] = row["_airbyte_meta"]
     bulk_insert(conn, schema, "ad_sets", clean_rows, columns)
     print(f"  Inserted {len(ad_sets)} ad sets")
 
@@ -633,13 +588,8 @@ def insert_ads(conn, schema: str, ads: list[dict]):
         "effective_status", "bid_type", "bid_amount", "bid_info", "creative",
         "created_time", "updated_time", "last_updated_by_app_id", "source_ad_id",
         "targeting", "tracking_specs", "conversion_specs", "adlabels", "recommendations",
-        "_airbyte_raw_id", "_airbyte_extracted_at", "_airbyte_meta",
     ]
     clean_rows = [{k: v for k, v in row.items() if not k.startswith("_")} for row in ads]
-    for i, row in enumerate(ads):
-        clean_rows[i]["_airbyte_raw_id"] = row["_airbyte_raw_id"]
-        clean_rows[i]["_airbyte_extracted_at"] = row["_airbyte_extracted_at"]
-        clean_rows[i]["_airbyte_meta"] = row["_airbyte_meta"]
     bulk_insert(conn, schema, "ads", clean_rows, columns)
     print(f"  Inserted {len(ads)} ads")
 
@@ -660,7 +610,6 @@ def insert_insights(conn, schema: str, insights: list[dict]):
         "cost_per_action_type", "cost_per_conversion",
         "purchase_roas", "website_purchase_roas", "outbound_clicks",
         "created_time", "updated_time",
-        "_airbyte_raw_id", "_airbyte_extracted_at", "_airbyte_meta",
     ]
     bulk_insert(conn, schema, "ads_insights", insights, columns)
     print(f"  Inserted {len(insights)} ads_insights rows")
@@ -741,7 +690,7 @@ def main():
 
     # Get DB URL
     db_url = args.db_url or get_db_url()
-    schema = f"raw_tenant_{args.tenant_id}"
+    schema = f"tenant_{args.tenant_id}"
     end_date = date(2026, 2, 19)  # Yesterday relative to "today" Feb 20, 2026
     start_date = end_date - timedelta(days=args.days - 1)
 

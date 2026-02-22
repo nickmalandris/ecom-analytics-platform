@@ -1,10 +1,10 @@
 -- Mart: Daily Orders
 -- Detailed order metrics including refund impact by day.
--- Source: {analytics_schema}.stg_shopify_orders, {analytics_schema}.stg_shopify_refunds
+-- Source: {schema}.stg_shopify_orders, {schema}.stg_shopify_refunds
 
-DROP MATERIALIZED VIEW IF EXISTS {analytics_schema}.mart_daily_orders CASCADE;
+DROP MATERIALIZED VIEW IF EXISTS {schema}.mart_daily_orders CASCADE;
 
-CREATE MATERIALIZED VIEW {analytics_schema}.mart_daily_orders AS
+CREATE MATERIALIZED VIEW {schema}.mart_daily_orders AS
 
 WITH daily_orders AS (
     SELECT
@@ -22,7 +22,7 @@ WITH daily_orders AS (
                                                         AS partially_refunded_orders,
         COUNT(*) FILTER (WHERE o.financial_status = 'refunded')
                                                         AS fully_refunded_orders
-    FROM {analytics_schema}.stg_shopify_orders o
+    FROM {schema}.stg_shopify_orders o
     GROUP BY o.order_date
 ),
 
@@ -33,7 +33,7 @@ daily_refunds AS (
         COUNT(DISTINCT r.order_id)                      AS orders_with_refunds,
         SUM(r.refund_total)                             AS refund_amount,
         SUM(r.refund_quantity)                          AS refund_item_count
-    FROM {analytics_schema}.stg_shopify_refunds r
+    FROM {schema}.stg_shopify_refunds r
     GROUP BY r.refund_date
 )
 

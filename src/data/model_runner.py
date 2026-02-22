@@ -1,7 +1,7 @@
 """
 Model Runner: Execute staging and mart SQL models in dependency order.
 
-Creates materialized views in an analytics schema from raw Airbyte data.
+Creates materialized views from raw data within the tenant's single schema.
 Supports per-tenant execution and full refresh.
 
 Usage:
@@ -27,7 +27,7 @@ SQL_DIR = PROJECT_ROOT / "sql"
 # Model execution order (respects dependencies)
 # ──────────────────────────────────────────────
 
-# Staging models must run first (they read from raw schema)
+# Staging models must run first (they read from raw tables)
 STAGING_MODELS = [
     "staging/stg_shopify_orders.sql",       # Also creates stg_shopify_order_lines
     "staging/stg_shopify_refunds.sql",
@@ -102,22 +102,20 @@ def get_models_to_run(args) -> list[str]:
         return ALL_MODELS
 
 
-def run_model(conn, sql_path: Path, raw_schema: str, analytics_schema: str) -> tuple[str, float]:
+def run_model(conn, sql_path: Path, schema: str) -> tuple[str, float]:
     """
     Execute a single SQL model file.
 
-    Replaces placeholders:
-      {raw_schema} -> the tenant's raw data schema (e.g., raw_tenant_1)
-      {analytics_schema} -> the tenant's analytics schema (e.g., analytics_tenant_1)
+    Replaces the {schema} placeholder with the tenant's schema name
+    (e.g., tenant_1).
 
     Returns (model_name, elapsed_seconds).
     """
     model_name = sql_path.stem
     sql = sql_path.read_text()
 
-    # Replace schema placeholders
-    sql = sql.replace("{raw_schema}", raw_schema)
-    sql = sql.replace("{analytics_schema}", analytics_schema)
+    # Replace schema placeholder
+    sql = sql.replace("{schema}", schema)
 
     t0 = time.time()
     with conn.cursor() as cur:
@@ -128,13 +126,13 @@ def run_model(conn, sql_path: Path, raw_schema: str, analytics_schema: str) -> t
     return model_name, elapsed
 
 
-def verify_models(conn, analytics_schema: str):
-    """Print row counts for all materialized views in the analytics schema."""
+def verify_models(conn, schema: str):
+    """Print row counts for all materialized views in the tenant schema."""
     with conn.cursor() as cur:
         cur.execute(f"""
             SELECT matviewname
             FROM pg_matviews
-            WHERE schemaname = '{analytics_schema}'
+            WHERE schemaname = '{schema}'
             ORDER BY matviewname
         """)
         views = cur.fetchall()
@@ -147,7 +145,7 @@ def verify_models(conn, analytics_schema: str):
         print(f"{'-'*45} {'-'*10}")
 
         for (view_name,) in views:
-            cur.execute(f"SELECT COUNT(*) FROM {analytics_schema}.{view_name}")
+            cur.execute(f"SELECT COUNT(*) FROM {schema}.{view_name}")
             count = cur.fetchone()[0]
             print(f"  {view_name:<43} {count:>10,}")
 
@@ -155,23 +153,21 @@ def verify_models(conn, analytics_schema: str):
 def main():
     args = parse_args()
     db_url = args.db_url or get_db_url()
-    raw_schema = f"raw_tenant_{args.tenant_id}"
-    analytics_schema = f"analytics_tenant_{args.tenant_id}"
+    schema = f"tenant_{args.tenant_id}"
 
     print(f"\nModel Runner Configuration:")
-    print(f"  Database:         {db_url.split('@')[1] if '@' in db_url else db_url}")
-    print(f"  Raw Schema:       {raw_schema}")
-    print(f"  Analytics Schema: {analytics_schema}")
+    print(f"  Database:  {db_url.split('@')[1] if '@' in db_url else db_url}")
+    print(f"  Schema:    {schema}")
     print()
 
     conn = psycopg2.connect(db_url)
 
     try:
-        # Create analytics schema
+        # Ensure schema exists
         with conn.cursor() as cur:
-            cur.execute(f"CREATE SCHEMA IF NOT EXISTS {analytics_schema}")
+            cur.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
         conn.commit()
-        print(f"  Ensured schema: {analytics_schema}")
+        print(f"  Ensured schema: {schema}")
 
         # Determine models to run
         models = get_models_to_run(args)
@@ -186,7 +182,7 @@ def main():
                 print(f"  ERROR: {sql_path} not found, skipping")
                 continue
 
-            model_name, elapsed = run_model(conn, sql_path, raw_schema, analytics_schema)
+            model_name, elapsed = run_model(conn, sql_path, schema)
             total_time += elapsed
             print(f"  OK  {model_name:<40} ({elapsed:.2f}s)")
 
@@ -196,7 +192,7 @@ def main():
         print("\n" + "=" * 60)
         print("MODEL VERIFICATION")
         print("=" * 60)
-        verify_models(conn, analytics_schema)
+        verify_models(conn, schema)
         print("=" * 60)
 
     finally:

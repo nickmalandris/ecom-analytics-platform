@@ -10,7 +10,7 @@ from datetime import date, timedelta
 
 
 def _schema(tenant_id: int) -> str:
-    return f"analytics_tenant_{tenant_id}"
+    return f"tenant_{tenant_id}"
 
 
 def get_revenue_summary(

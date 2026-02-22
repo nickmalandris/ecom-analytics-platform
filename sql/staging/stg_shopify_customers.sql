@@ -1,10 +1,10 @@
 -- Staging: Shopify Customers
 -- Cleans and normalizes customer data.
--- Source: {raw_schema}.customers
+-- Source: {schema}.customers
 
-DROP MATERIALIZED VIEW IF EXISTS {analytics_schema}.stg_shopify_customers CASCADE;
+DROP MATERIALIZED VIEW IF EXISTS {schema}.stg_shopify_customers CASCADE;
 
-CREATE MATERIALIZED VIEW {analytics_schema}.stg_shopify_customers AS
+CREATE MATERIALIZED VIEW {schema}.stg_shopify_customers AS
 
 SELECT
     c.id                                                AS customer_id,
@@ -43,4 +43,4 @@ SELECT
         WHEN c.orders_count BETWEEN 2 AND 3 THEN 'repeat_buyer'
         ELSE 'loyal_buyer'
     END                                                 AS customer_segment
-FROM {raw_schema}.customers c;
+FROM {schema}.customers c;

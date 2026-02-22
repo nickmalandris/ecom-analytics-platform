@@ -132,11 +132,9 @@ def create_tenant(body: TenantCreate, _admin: dict = Depends(require_admin)):
             row = cur.fetchone()
             tenant_id = row[0]
 
-            # Create raw and analytics schemas for the new tenant
-            raw_schema = f"raw_tenant_{tenant_id}"
-            analytics_schema = f"analytics_tenant_{tenant_id}"
-            cur.execute(f"CREATE SCHEMA IF NOT EXISTS {raw_schema}")
-            cur.execute(f"CREATE SCHEMA IF NOT EXISTS {analytics_schema}")
+            # Create tenant schema
+            schema = f"tenant_{tenant_id}"
+            cur.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
 
         conn.commit()
     except Exception as e:
@@ -198,11 +196,9 @@ def delete_tenant(tenant_id: int, _admin: dict = Depends(require_admin)):
     conn = psycopg2.connect(_get_db_url())
     try:
         with conn.cursor() as cur:
-            # Drop schemas
-            raw_schema = f"raw_tenant_{tenant_id}"
-            analytics_schema = f"analytics_tenant_{tenant_id}"
-            cur.execute(f"DROP SCHEMA IF EXISTS {raw_schema} CASCADE")
-            cur.execute(f"DROP SCHEMA IF EXISTS {analytics_schema} CASCADE")
+            # Drop tenant schema
+            schema = f"tenant_{tenant_id}"
+            cur.execute(f"DROP SCHEMA IF EXISTS {schema} CASCADE")
 
             # Delete tenant record
             cur.execute("DELETE FROM public.tenants WHERE id = %s", (tenant_id,))

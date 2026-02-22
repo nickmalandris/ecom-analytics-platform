@@ -1,10 +1,10 @@
 -- Mart: Daily Blended Performance
 -- Combines Shopify revenue with Meta Ads spend for cross-platform metrics.
--- Source: {analytics_schema}.stg_shopify_orders, {analytics_schema}.stg_meta_ad_insights
+-- Source: {schema}.stg_shopify_orders, {schema}.stg_meta_ad_insights
 
-DROP MATERIALIZED VIEW IF EXISTS {analytics_schema}.mart_daily_blended_performance CASCADE;
+DROP MATERIALIZED VIEW IF EXISTS {schema}.mart_daily_blended_performance CASCADE;
 
-CREATE MATERIALIZED VIEW {analytics_schema}.mart_daily_blended_performance AS
+CREATE MATERIALIZED VIEW {schema}.mart_daily_blended_performance AS
 
 WITH daily_shopify AS (
     SELECT
@@ -13,7 +13,7 @@ WITH daily_shopify AS (
         SUM(o.total_price)                              AS total_revenue,
         ROUND(AVG(o.total_price), 2)                    AS avg_order_value,
         COUNT(DISTINCT o.customer_id)                   AS unique_customers
-    FROM {analytics_schema}.stg_shopify_orders o
+    FROM {schema}.stg_shopify_orders o
     GROUP BY o.order_date
 ),
 
@@ -26,7 +26,7 @@ daily_meta AS (
         SUM(i.purchases)                                AS meta_purchases,
         SUM(i.purchase_revenue)                         AS meta_revenue,
         COUNT(DISTINCT i.campaign_id)                   AS active_campaigns
-    FROM {analytics_schema}.stg_meta_ad_insights i
+    FROM {schema}.stg_meta_ad_insights i
     GROUP BY i.insight_date
 ),
 
@@ -35,7 +35,7 @@ daily_refunds AS (
         r.refund_date,
         SUM(r.refund_total)                             AS total_refund_amount,
         COUNT(DISTINCT r.refund_id)                     AS total_refunds
-    FROM {analytics_schema}.stg_shopify_refunds r
+    FROM {schema}.stg_shopify_refunds r
     GROUP BY r.refund_date
 )
 

@@ -1,10 +1,10 @@
 -- Staging: Shopify Products & Variants
 -- Joins products with product_variants for a denormalized view.
--- Source: {raw_schema}.products, {raw_schema}.product_variants
+-- Source: {schema}.products, {schema}.product_variants
 
-DROP MATERIALIZED VIEW IF EXISTS {analytics_schema}.stg_shopify_products CASCADE;
+DROP MATERIALIZED VIEW IF EXISTS {schema}.stg_shopify_products CASCADE;
 
-CREATE MATERIALIZED VIEW {analytics_schema}.stg_shopify_products AS
+CREATE MATERIALIZED VIEW {schema}.stg_shopify_products AS
 
 SELECT
     p.id                                                AS product_id,
@@ -45,6 +45,6 @@ SELECT
         WHEN pv.inventory_quantity <= 10 THEN 'low_stock'
         ELSE 'in_stock'
     END                                                 AS stock_status
-FROM {raw_schema}.products p
-JOIN {raw_schema}.product_variants pv ON p.id = pv.product_id
+FROM {schema}.products p
+JOIN {schema}.product_variants pv ON p.id = pv.product_id
 WHERE p.status = 'active';

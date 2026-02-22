@@ -81,7 +81,6 @@ def _upsert_products(conn, schema: str, products: list[dict]) -> int:
         "tags", "template_suffix", "published_at", "published_scope", "created_at",
         "updated_at", "shop_url", "admin_graphql_api_id", "variants", "options",
         "image", "images", "total_inventory", "total_variants",
-        "_airbyte_raw_id", "_airbyte_extracted_at", "_airbyte_meta",
     ]
     return _upsert_rows(conn, schema, "products", columns, products, conflict_col="id")
 
@@ -97,7 +96,6 @@ def _upsert_variants(conn, schema: str, variants: list[dict]) -> int:
         "old_inventory_quantity", "inventory_policy", "requires_shipping",
         "image_id", "image_src", "available_for_sale", "display_name",
         "admin_graphql_api_id", "created_at", "updated_at", "shop_url",
-        "_airbyte_raw_id", "_airbyte_extracted_at", "_airbyte_meta",
     ]
     return _upsert_rows(conn, schema, "product_variants", columns, variants, conflict_col="id")
 
@@ -113,7 +111,6 @@ def _upsert_customers(conn, schema: str, customers: list[dict]) -> int:
         "orders_count", "total_spent", "last_order_id", "last_order_name",
         "admin_graphql_api_id", "created_at", "updated_at", "shop_url",
         "default_address", "addresses", "email_marketing_consent", "sms_marketing_consent",
-        "_airbyte_raw_id", "_airbyte_extracted_at", "_airbyte_meta",
     ]
     return _upsert_rows(conn, schema, "customers", columns, customers, conflict_col="id")
 
@@ -145,7 +142,6 @@ def _upsert_orders(conn, schema: str, orders: list[dict]) -> int:
         "total_tip_received", "total_weight", "updated_at",
         "customer", "billing_address", "shipping_address", "shipping_lines",
         "line_items", "fulfillments", "refunds", "shop_url",
-        "_airbyte_raw_id", "_airbyte_extracted_at", "_airbyte_meta",
     ]
     return _upsert_rows(conn, schema, "orders", columns, orders, conflict_col="id")
 
@@ -158,7 +154,6 @@ def _upsert_refunds(conn, schema: str, refunds: list[dict]) -> int:
         "id", "order_id", "admin_graphql_api_id", "created_at", "processed_at",
         "note", "restock", "user_id", "duties", "shop_url", "return",
         "total_duties_set", "order_adjustments", "refund_line_items", "transactions",
-        "_airbyte_raw_id", "_airbyte_extracted_at", "_airbyte_meta",
     ]
     return _upsert_rows(conn, schema, "order_refunds", columns, refunds, conflict_col="id")
 
@@ -181,7 +176,7 @@ def _upsert_rows(
 
     col_names = ", ".join(f'"{c}"' if c == "return" else c for c in columns)
     placeholders = ", ".join(["%s"] * len(columns))
-    update_cols = [c for c in columns if c != conflict_col and not c.startswith("_airbyte")]
+    update_cols = [c for c in columns if c != conflict_col]
     update_set = ", ".join(
         f'"{c}" = EXCLUDED."{c}"' if c == "return" else f"{c} = EXCLUDED.{c}"
         for c in update_cols
@@ -228,7 +223,7 @@ def _backfill_refunds(conn, tenant_id: int, store_url: str) -> int:
     We fetch all refunded/partially_refunded orders via standard API to fill gaps.
     """
     logger.info("Backfilling refund details via paginated API...")
-    schema = f"raw_tenant_{tenant_id}"
+    schema = f"tenant_{tenant_id}"
     query_filter = "financial_status:refunded OR financial_status:partially_refunded"
     
     total_orders = 0
@@ -272,7 +267,7 @@ def full_sync(tenant_id: int, db_url: str | None = None) -> dict:
     load_dotenv()
     db_url = db_url or _get_db_url()
     conn = psycopg2.connect(db_url)
-    schema = f"raw_tenant_{tenant_id}"
+    schema = f"tenant_{tenant_id}"
 
     try:
         ensure_sync_state_table(conn)
@@ -436,7 +431,7 @@ def incremental_sync(tenant_id: int, db_url: str | None = None) -> dict:
     load_dotenv()
     db_url = db_url or _get_db_url()
     conn = psycopg2.connect(db_url)
-    schema = f"raw_tenant_{tenant_id}"
+    schema = f"tenant_{tenant_id}"
 
     try:
         ensure_sync_state_table(conn)

@@ -78,19 +78,15 @@ def run_weekly_report(tenant_id: int = 1) -> str | None:
 
         PROJECT_ROOT = Path(__file__).parent.parent.parent
         SQL_DIR = PROJECT_ROOT / "sql"
-        raw_schema = f"raw_tenant_{tenant_id}"
-        analytics_schema = f"analytics_tenant_{tenant_id}"
+        schema = f"tenant_{tenant_id}"
 
         conn = psycopg2.connect(db_url)
-        with conn.cursor() as cur:
-            cur.execute(f"CREATE SCHEMA IF NOT EXISTS {analytics_schema}")
-        conn.commit()
 
         from src.data.model_runner import ALL_MODELS
         for model_path_str in ALL_MODELS:
             sql_path = SQL_DIR / model_path_str
             if sql_path.exists():
-                run_model(conn, sql_path, raw_schema, analytics_schema)
+                run_model(conn, sql_path, schema)
 
         conn.close()
         logger.info("Data models refreshed")

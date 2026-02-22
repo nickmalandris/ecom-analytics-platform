@@ -1,10 +1,10 @@
 -- Staging: Shopify Refunds
 -- Flattens order_refunds and explodes refund_line_items JSONB.
--- Source: {raw_schema}.order_refunds
+-- Source: {schema}.order_refunds
 
-DROP MATERIALIZED VIEW IF EXISTS {analytics_schema}.stg_shopify_refunds CASCADE;
+DROP MATERIALIZED VIEW IF EXISTS {schema}.stg_shopify_refunds CASCADE;
 
-CREATE MATERIALIZED VIEW {analytics_schema}.stg_shopify_refunds AS
+CREATE MATERIALIZED VIEW {schema}.stg_shopify_refunds AS
 
 SELECT
     r.id                                                AS refund_id,
@@ -31,5 +31,5 @@ SELECT
     rli->'line_item'->>'vendor'                         AS vendor,
     (rli->'line_item'->>'price')::NUMERIC(12,2)         AS original_unit_price,
     (rli->'line_item'->>'quantity')::INT                AS original_quantity
-FROM {raw_schema}.order_refunds r,
+FROM {schema}.order_refunds r,
      jsonb_array_elements(r.refund_line_items) AS rli;

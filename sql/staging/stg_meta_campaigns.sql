@@ -1,11 +1,11 @@
 -- Staging: Meta Ads Campaigns, Ad Sets, and Ads
 -- Cleans and joins the campaign hierarchy.
--- Source: {raw_schema}.campaigns, {raw_schema}.ad_sets, {raw_schema}.ads
+-- Source: {schema}.campaigns, {schema}.ad_sets, {schema}.ads
 
 -- Campaigns
-DROP MATERIALIZED VIEW IF EXISTS {analytics_schema}.stg_meta_campaigns CASCADE;
+DROP MATERIALIZED VIEW IF EXISTS {schema}.stg_meta_campaigns CASCADE;
 
-CREATE MATERIALIZED VIEW {analytics_schema}.stg_meta_campaigns AS
+CREATE MATERIALIZED VIEW {schema}.stg_meta_campaigns AS
 SELECT
     c.id                                                AS campaign_id,
     c.account_id,
@@ -20,12 +20,12 @@ SELECT
     c.stop_time                                         AS campaign_stop_time,
     c.created_time                                      AS campaign_created_at,
     c.updated_time                                      AS campaign_updated_at
-FROM {raw_schema}.campaigns c;
+FROM {schema}.campaigns c;
 
 -- Ad Sets
-DROP MATERIALIZED VIEW IF EXISTS {analytics_schema}.stg_meta_ad_sets CASCADE;
+DROP MATERIALIZED VIEW IF EXISTS {schema}.stg_meta_ad_sets CASCADE;
 
-CREATE MATERIALIZED VIEW {analytics_schema}.stg_meta_ad_sets AS
+CREATE MATERIALIZED VIEW {schema}.stg_meta_ad_sets AS
 SELECT
     ads.id                                              AS ad_set_id,
     ads.account_id,
@@ -40,12 +40,12 @@ SELECT
     ads.created_time                                    AS ad_set_created_at,
     ads.updated_time                                    AS ad_set_updated_at,
     ads.learning_stage_info->>'status'                  AS learning_status
-FROM {raw_schema}.ad_sets ads;
+FROM {schema}.ad_sets ads;
 
 -- Ads
-DROP MATERIALIZED VIEW IF EXISTS {analytics_schema}.stg_meta_ads CASCADE;
+DROP MATERIALIZED VIEW IF EXISTS {schema}.stg_meta_ads CASCADE;
 
-CREATE MATERIALIZED VIEW {analytics_schema}.stg_meta_ads AS
+CREATE MATERIALIZED VIEW {schema}.stg_meta_ads AS
 SELECT
     a.id                                                AS ad_id,
     a.account_id,
@@ -57,4 +57,4 @@ SELECT
     a.creative->>'creative_id'                          AS creative_id,
     a.created_time                                      AS ad_created_at,
     a.updated_time                                      AS ad_updated_at
-FROM {raw_schema}.ads a;
+FROM {schema}.ads a;
