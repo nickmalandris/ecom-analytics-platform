@@ -15,8 +15,8 @@ from src.api.auth_flow import router as auth_router
 from src.api.onboarding import router as onboarding_router
 from src.api.reports import router as reports_router
 from src.api.sync import router as sync_router
+from src.api.users import router as users_router
 from src.api.tenants import router as tenants_router
-from src.api.auth_flow import router as auth_router
 from src.scheduler.scheduler import start_scheduler, stop_scheduler
 
 # ── Logging ──────────────────────────────────────
@@ -55,6 +55,7 @@ app.include_router(tenants_router, prefix="/api")
 app.include_router(reports_router, prefix="/api")
 app.include_router(sync_router, prefix="/api")
 app.include_router(auth_router, prefix="/api/auth")
+app.include_router(users_router) # /auth and /users endpoints are self-contained
 app.include_router(onboarding_router)
 
 # Mount static files
