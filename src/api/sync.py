@@ -68,6 +68,43 @@ def trigger_shopify_sync(
     )
 
 
+@router.post("/meta", response_model=SyncResponse)
+def trigger_meta_sync(
+    body: SyncRequest,
+    background_tasks: BackgroundTasks,
+    tenant: dict = Depends(resolve_tenant),
+):
+    """
+    Trigger a Meta Ads data sync for the current tenant.
+
+    - mode=full: Truncates and re-pulls all data (lifetime insights)
+    - mode=incremental: Upserts entities and last 7 days of insights
+
+    Runs in background and returns immediately.
+    """
+    if tenant.get("is_admin"):
+        raise HTTPException(
+            status_code=400,
+            detail="Use /sync/meta/{tenant_id} for admin-triggered syncs",
+        )
+
+    tenant_id = tenant["id"]
+    mode = body.mode.lower()
+    if mode not in ("full", "incremental"):
+        raise HTTPException(status_code=400, detail="mode must be 'full' or 'incremental'")
+
+    logger.info(f"Meta sync triggered: tenant={tenant_id} mode={mode}")
+
+    from src.ingestion.meta_sync import full_sync, incremental_sync
+    sync_fn = full_sync if mode == "full" else incremental_sync
+    background_tasks.add_task(sync_fn, tenant_id)
+
+    return SyncResponse(
+        status="triggered",
+        message=f"Meta {mode} sync started for tenant {tenant_id}. Running in background.",
+    )
+
+
 @router.post("/shopify/{tenant_id}", response_model=SyncResponse)
 def trigger_shopify_sync_admin(
     tenant_id: int,
@@ -89,6 +126,30 @@ def trigger_shopify_sync_admin(
     return SyncResponse(
         status="triggered",
         message=f"Shopify {mode} sync started for tenant {tenant_id}. Running in background.",
+    )
+
+
+@router.post("/meta/{tenant_id}", response_model=SyncResponse)
+def trigger_meta_sync_admin(
+    tenant_id: int,
+    body: SyncRequest,
+    background_tasks: BackgroundTasks,
+    _admin: dict = Depends(require_admin),
+):
+    """Trigger a Meta sync for a specific tenant (admin only)."""
+    mode = body.mode.lower()
+    if mode not in ("full", "incremental"):
+        raise HTTPException(status_code=400, detail="mode must be 'full' or 'incremental'")
+
+    logger.info(f"Admin-triggered Meta sync: tenant={tenant_id} mode={mode}")
+
+    from src.ingestion.meta_sync import full_sync, incremental_sync
+    sync_fn = full_sync if mode == "full" else incremental_sync
+    background_tasks.add_task(sync_fn, tenant_id)
+
+    return SyncResponse(
+        status="triggered",
+        message=f"Meta {mode} sync started for tenant {tenant_id}. Running in background.",
     )
 
 

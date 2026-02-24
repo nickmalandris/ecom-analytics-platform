@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     shopify_secret_key: str = ""
     shopify_store_url: str = ""
 
+    # Meta Marketing API
+    meta_app_id: str = ""
+    meta_app_secret: str = ""
+    meta_short_lived_token: str = ""
+    meta_ad_account_id: str = ""
+
     # Email
     smtp_host: str = "smtp.gmail.com"
     smtp_port: int = 587

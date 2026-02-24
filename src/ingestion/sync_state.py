@@ -27,7 +27,10 @@ CREATE TABLE IF NOT EXISTS public.sync_state (
 );
 """
 
-RESOURCES = ["products", "customers", "orders", "order_refunds"]
+RESOURCES = [
+    "products", "customers", "orders", "order_refunds",
+    "campaigns", "ad_sets", "ads", "ads_insights",
+]
 
 
 def ensure_sync_state_table(conn: psycopg2.extensions.connection) -> None:
