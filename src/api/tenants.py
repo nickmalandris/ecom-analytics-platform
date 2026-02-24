@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from src.api.auth import require_admin, resolve_tenant
 from src.api.schemas import TenantCreate, TenantResponse, TenantUpdate
 from src.config import settings
+from src.ingestion.db_utils import create_tenant_schema_and_tables
 
 router = APIRouter(prefix="/tenants", tags=["tenants"])
 
@@ -152,9 +153,8 @@ def create_tenant(body: TenantCreate, _admin: dict = Depends(require_admin)):
             row = cur.fetchone()
             tenant_id = row[0]
 
-            # Create tenant schema
-            schema = f"tenant_{tenant_id}"
-            cur.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
+            # Create tenant schema and tables
+            create_tenant_schema_and_tables(conn, tenant_id)
 
         conn.commit()
     except Exception as e:

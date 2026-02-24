@@ -12,6 +12,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
 from src.config import settings
+from src.ingestion.db_utils import create_tenant_schema_and_tables
 
 router = APIRouter(prefix="/onboarding", tags=["onboarding"])
 logger = logging.getLogger(__name__)
@@ -78,8 +79,8 @@ async def initiate_shopify_connection(body: ShopifyConnectRequest):
                 )
                 tenant_id = cur.fetchone()[0]
                 
-                # Create schema
-                cur.execute(f"CREATE SCHEMA IF NOT EXISTS tenant_{tenant_id}")
+                # Create schema and tables
+                create_tenant_schema_and_tables(conn, tenant_id)
         
         conn.commit()
     except Exception as e:
