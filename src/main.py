@@ -51,7 +51,7 @@ app = FastAPI(
 app.include_router(tenants_router, prefix="/api")
 app.include_router(reports_router, prefix="/api")
 app.include_router(sync_router, prefix="/api")
-app.include_router(auth_router, prefix="/api")
+app.include_router(auth_router, prefix="/api/auth")
 
 
 @app.get("/health")
