@@ -13,7 +13,6 @@ Usage:
 """
 
 import argparse
-import json
 import logging
 import os
 import sys
@@ -21,10 +20,9 @@ import time
 from datetime import datetime, timezone
 
 import psycopg2
-import psycopg2.extras
 from dotenv import load_dotenv
-from psycopg2.extras import Json
 
+from src.ingestion.db_utils import fmt_summary, get_db_url, upsert_rows
 from src.ingestion.shopify_bulk import ShopifyBulkClient
 from src.ingestion.shopify_client import ShopifyClient, ShopifyClientError
 from src.ingestion.shopify_queries import (
@@ -51,14 +49,16 @@ from src.ingestion.sync_state import (
 
 logger = logging.getLogger(__name__)
 
+SHOPIFY_RESOURCE_KEYS = [
+    ("products", "Products"),
+    ("product_variants", "Variants"),
+    ("customers", "Customers"),
+    ("orders", "Orders"),
+    ("order_refunds", "Refunds"),
+]
+
+
 # ─── DB helpers ──────────────────────────────────────────
-
-
-def _get_db_url() -> str:
-    return os.getenv(
-        "DATABASE_URL",
-        "postgresql://analytics_user:analytics_pass@localhost:5435/analytics",
-    )
 
 
 def _get_tenant_store_url(conn: psycopg2.extensions.connection, tenant_id: int) -> str | None:
@@ -72,23 +72,23 @@ def _get_tenant_store_url(conn: psycopg2.extensions.connection, tenant_id: int) 
     return row[0] if row else None
 
 
-def _upsert_products(conn, schema: str, products: list[dict]) -> int:
+def _upsert_products(conn, schema: str, products: list[dict]) -> dict[str, int]:
     """Upsert product rows into the raw table."""
     if not products:
-        return 0
+        return {"inserted": 0, "updated": 0, "unchanged": 0}
     columns = [
         "id", "title", "body_html", "vendor", "product_type", "handle", "status",
         "tags", "template_suffix", "published_at", "published_scope", "created_at",
         "updated_at", "shop_url", "admin_graphql_api_id", "variants", "options",
         "image", "images", "total_inventory", "total_variants",
     ]
-    return _upsert_rows(conn, schema, "products", columns, products, conflict_col="id")
+    return upsert_rows(conn, schema, "products", columns, products, conflict_col="id")
 
 
-def _upsert_variants(conn, schema: str, variants: list[dict]) -> int:
+def _upsert_variants(conn, schema: str, variants: list[dict]) -> dict[str, int]:
     """Upsert product variant rows."""
     if not variants:
-        return 0
+        return {"inserted": 0, "updated": 0, "unchanged": 0}
     columns = [
         "id", "product_id", "title", "price", "compare_at_price", "sku", "barcode",
         "position", "option1", "option2", "option3", "grams", "weight", "weight_unit",
@@ -97,13 +97,13 @@ def _upsert_variants(conn, schema: str, variants: list[dict]) -> int:
         "image_id", "image_src", "available_for_sale", "display_name",
         "admin_graphql_api_id", "created_at", "updated_at", "shop_url",
     ]
-    return _upsert_rows(conn, schema, "product_variants", columns, variants, conflict_col="id")
+    return upsert_rows(conn, schema, "product_variants", columns, variants, conflict_col="id")
 
 
-def _upsert_customers(conn, schema: str, customers: list[dict]) -> int:
+def _upsert_customers(conn, schema: str, customers: list[dict]) -> dict[str, int]:
     """Upsert customer rows."""
     if not customers:
-        return 0
+        return {"inserted": 0, "updated": 0, "unchanged": 0}
     columns = [
         "id", "email", "first_name", "last_name", "phone", "state", "tags",
         "currency", "note", "verified_email", "tax_exempt", "tax_exemptions",
@@ -112,13 +112,13 @@ def _upsert_customers(conn, schema: str, customers: list[dict]) -> int:
         "admin_graphql_api_id", "created_at", "updated_at", "shop_url",
         "default_address", "addresses", "email_marketing_consent", "sms_marketing_consent",
     ]
-    return _upsert_rows(conn, schema, "customers", columns, customers, conflict_col="id")
+    return upsert_rows(conn, schema, "customers", columns, customers, conflict_col="id")
 
 
-def _upsert_orders(conn, schema: str, orders: list[dict]) -> int:
+def _upsert_orders(conn, schema: str, orders: list[dict]) -> dict[str, int]:
     """Upsert order rows."""
     if not orders:
-        return 0
+        return {"inserted": 0, "updated": 0, "unchanged": 0}
     columns = [
         "id", "admin_graphql_api_id", "app_id", "browser_ip",
         "buyer_accepts_marketing", "cancel_reason", "cancelled_at", "cart_token",
@@ -143,66 +143,19 @@ def _upsert_orders(conn, schema: str, orders: list[dict]) -> int:
         "customer", "billing_address", "shipping_address", "shipping_lines",
         "line_items", "fulfillments", "refunds", "shop_url",
     ]
-    return _upsert_rows(conn, schema, "orders", columns, orders, conflict_col="id")
+    return upsert_rows(conn, schema, "orders", columns, orders, conflict_col="id")
 
 
-def _upsert_refunds(conn, schema: str, refunds: list[dict]) -> int:
+def _upsert_refunds(conn, schema: str, refunds: list[dict]) -> dict[str, int]:
     """Upsert refund rows."""
     if not refunds:
-        return 0
+        return {"inserted": 0, "updated": 0, "unchanged": 0}
     columns = [
         "id", "order_id", "admin_graphql_api_id", "created_at", "processed_at",
         "note", "restock", "user_id", "duties", "shop_url", "return",
         "total_duties_set", "order_adjustments", "refund_line_items", "transactions",
     ]
-    return _upsert_rows(conn, schema, "order_refunds", columns, refunds, conflict_col="id")
-
-
-def _upsert_rows(
-    conn,
-    schema: str,
-    table: str,
-    columns: list[str],
-    rows: list[dict],
-    conflict_col: str = "id",
-) -> int:
-    """
-    Generic upsert: INSERT ... ON CONFLICT DO UPDATE.
-
-    Returns the number of rows upserted.
-    """
-    if not rows:
-        return 0
-
-    col_names = ", ".join(f'"{c}"' if c == "return" else c for c in columns)
-    placeholders = ", ".join(["%s"] * len(columns))
-    update_cols = [c for c in columns if c != conflict_col]
-    update_set = ", ".join(
-        f'"{c}" = EXCLUDED."{c}"' if c == "return" else f"{c} = EXCLUDED.{c}"
-        for c in update_cols
-    )
-
-    sql = (
-        f"INSERT INTO {schema}.{table} ({col_names}) VALUES ({placeholders}) "
-        f"ON CONFLICT ({conflict_col}) DO UPDATE SET {update_set}"
-    )
-
-    batch = []
-    for row in rows:
-        values = []
-        for col in columns:
-            val = row.get(col)
-            if isinstance(val, (dict, list)):
-                values.append(Json(val))
-            else:
-                values.append(val)
-        batch.append(tuple(values))
-
-    with conn.cursor() as cur:
-        psycopg2.extras.execute_batch(cur, sql, batch, page_size=500)
-    conn.commit()
-
-    return len(batch)
+    return upsert_rows(conn, schema, "order_refunds", columns, refunds, conflict_col="id")
 
 
 def _truncate_shopify_tables(conn, schema: str) -> None:
@@ -222,7 +175,7 @@ def _backfill_refunds(conn, tenant_id: int, store_url: str) -> int:
     Bulk API cannot fetch nested refund line items/transactions due to limitations.
     We fetch all refunded/partially_refunded orders via standard API to fill gaps.
     """
-    logger.info("Backfilling refund details via paginated API...")
+    logger.debug("Backfilling refund details via paginated API...")
     schema = f"tenant_{tenant_id}"
     query_filter = "financial_status:refunded OR financial_status:partially_refunded"
     
@@ -244,7 +197,7 @@ def _backfill_refunds(conn, tenant_id: int, store_url: str) -> int:
                 total_orders += len(order_rows)
                 order_rows, refund_rows = [], []
                 
-    logger.info(f"Backfilled {total_orders} refunded orders with full details")
+    logger.debug(f"Backfilled {total_orders} refunded orders with full details")
     return total_orders
 
 
@@ -265,7 +218,7 @@ def full_sync(tenant_id: int, db_url: str | None = None) -> dict:
     Returns a summary dict with record counts.
     """
     load_dotenv()
-    db_url = db_url or _get_db_url()
+    db_url = db_url or get_db_url()
     conn = psycopg2.connect(db_url)
     schema = f"tenant_{tenant_id}"
 
@@ -312,12 +265,11 @@ def full_sync(tenant_id: int, db_url: str | None = None) -> dict:
                     cur.execute(f"TRUNCATE TABLE {schema}.products CASCADE")
                 conn.commit()
 
-                _upsert_products(conn, schema, product_rows)
-                _upsert_variants(conn, schema, variant_rows)
+                p_counts = _upsert_products(conn, schema, product_rows)
+                v_counts = _upsert_variants(conn, schema, variant_rows)
                 mark_sync_completed(conn, tenant_id, "products", len(product_rows), sync_start)
-                summary["products"] = len(product_rows)
-                summary["product_variants"] = len(variant_rows)
-                logger.info(f"Products: {len(product_rows)}, Variants: {len(variant_rows)}")
+                summary["products"] = p_counts
+                summary["product_variants"] = v_counts
 
                 # Clean up temp file
                 jsonl_path.unlink(missing_ok=True)
@@ -344,10 +296,9 @@ def full_sync(tenant_id: int, db_url: str | None = None) -> dict:
                     cur.execute(f"TRUNCATE TABLE {schema}.customers CASCADE")
                 conn.commit()
 
-                _upsert_customers(conn, schema, customer_rows)
+                c_counts = _upsert_customers(conn, schema, customer_rows)
                 mark_sync_completed(conn, tenant_id, "customers", len(customer_rows), sync_start)
-                summary["customers"] = len(customer_rows)
-                logger.info(f"Customers: {len(customer_rows)}")
+                summary["customers"] = c_counts
 
                 jsonl_path.unlink(missing_ok=True)
             except Exception as e:
@@ -388,19 +339,18 @@ def full_sync(tenant_id: int, db_url: str | None = None) -> dict:
                     cur.execute(f"TRUNCATE TABLE {schema}.orders CASCADE")
                 conn.commit()
 
-                _upsert_orders(conn, schema, order_rows)
-                _upsert_refunds(conn, schema, refund_rows)
+                o_counts = _upsert_orders(conn, schema, order_rows)
+                r_counts = _upsert_refunds(conn, schema, refund_rows)
                 
-                # Backfill detailed refund data
-                backfilled_count = _backfill_refunds(conn, tenant_id, store_url)
+                # Backfill detailed refund data via paginated API
+                # (Bulk API cannot fetch nested refund line items/transactions)
+                _backfill_refunds(conn, tenant_id, store_url)
                 
                 mark_sync_completed(conn, tenant_id, "orders", len(order_rows), sync_start)
                 mark_sync_started(conn, tenant_id, "order_refunds")
                 mark_sync_completed(conn, tenant_id, "order_refunds", len(refund_rows), sync_start)
-                summary["orders"] = len(order_rows)
-                summary["order_refunds"] = len(refund_rows)
-                summary["backfilled_refund_orders"] = backfilled_count
-                logger.info(f"Orders: {len(order_rows)}, Refunds: {len(refund_rows)}")
+                summary["orders"] = o_counts
+                summary["order_refunds"] = r_counts
 
                 jsonl_path.unlink(missing_ok=True)
             except Exception as e:
@@ -409,7 +359,6 @@ def full_sync(tenant_id: int, db_url: str | None = None) -> dict:
 
         elapsed = (datetime.now(timezone.utc) - sync_start).total_seconds()
         summary["elapsed_seconds"] = round(elapsed, 1)
-        logger.info(f"Full sync completed in {elapsed:.1f}s: {summary}")
         return summary
 
     finally:
@@ -429,7 +378,7 @@ def incremental_sync(tenant_id: int, db_url: str | None = None) -> dict:
     Returns a summary dict with record counts.
     """
     load_dotenv()
-    db_url = db_url or _get_db_url()
+    db_url = db_url or get_db_url()
     conn = psycopg2.connect(db_url)
     schema = f"tenant_{tenant_id}"
 
@@ -470,12 +419,11 @@ def incremental_sync(tenant_id: int, db_url: str | None = None) -> dict:
                         product_rows.append(p_row)
                         variant_rows.extend(v_rows)
 
-                _upsert_products(conn, schema, product_rows)
-                _upsert_variants(conn, schema, variant_rows)
+                p_counts = _upsert_products(conn, schema, product_rows)
+                v_counts = _upsert_variants(conn, schema, variant_rows)
                 mark_sync_completed(conn, tenant_id, "products", len(product_rows), sync_start)
-                summary["products"] = len(product_rows)
-                summary["product_variants"] = len(variant_rows)
-                logger.info(f"Products: {len(product_rows)}, Variants: {len(variant_rows)}")
+                summary["products"] = p_counts
+                summary["product_variants"] = v_counts
             except Exception as e:
                 mark_sync_failed(conn, tenant_id, "products", str(e))
                 raise
@@ -493,10 +441,9 @@ def incremental_sync(tenant_id: int, db_url: str | None = None) -> dict:
                     for node in page:
                         customer_rows.append(transform_customer(node, store_url))
 
-                _upsert_customers(conn, schema, customer_rows)
+                c_counts = _upsert_customers(conn, schema, customer_rows)
                 mark_sync_completed(conn, tenant_id, "customers", len(customer_rows), sync_start)
-                summary["customers"] = len(customer_rows)
-                logger.info(f"Customers: {len(customer_rows)}")
+                summary["customers"] = c_counts
             except Exception as e:
                 mark_sync_failed(conn, tenant_id, "customers", str(e))
                 raise
@@ -516,21 +463,19 @@ def incremental_sync(tenant_id: int, db_url: str | None = None) -> dict:
                         order_rows.append(o_row)
                         refund_rows.extend(r_rows)
 
-                _upsert_orders(conn, schema, order_rows)
-                _upsert_refunds(conn, schema, refund_rows)
+                o_counts = _upsert_orders(conn, schema, order_rows)
+                r_counts = _upsert_refunds(conn, schema, refund_rows)
                 mark_sync_completed(conn, tenant_id, "orders", len(order_rows), sync_start)
                 mark_sync_started(conn, tenant_id, "order_refunds")
                 mark_sync_completed(conn, tenant_id, "order_refunds", len(refund_rows), sync_start)
-                summary["orders"] = len(order_rows)
-                summary["order_refunds"] = len(refund_rows)
-                logger.info(f"Orders: {len(order_rows)}, Refunds: {len(refund_rows)}")
+                summary["orders"] = o_counts
+                summary["order_refunds"] = r_counts
             except Exception as e:
                 mark_sync_failed(conn, tenant_id, "orders", str(e))
                 raise
 
         elapsed = (datetime.now(timezone.utc) - sync_start).total_seconds()
         summary["elapsed_seconds"] = round(elapsed, 1)
-        logger.info(f"Incremental sync completed in {elapsed:.1f}s: {summary}")
         return summary
 
     finally:
@@ -559,7 +504,7 @@ def main():
 
     args = parse_args()
     load_dotenv()
-    db_url = args.db_url or _get_db_url()
+    db_url = args.db_url or get_db_url()
 
     try:
         if args.full:
@@ -567,7 +512,7 @@ def main():
         else:
             result = incremental_sync(args.tenant_id, db_url)
 
-        print(f"\nSync complete: {json.dumps(result, indent=2)}")
+        print(fmt_summary(result, SHOPIFY_RESOURCE_KEYS))
     except ShopifyClientError as e:
         print(f"\nSync failed: {e}", file=sys.stderr)
         sys.exit(1)
