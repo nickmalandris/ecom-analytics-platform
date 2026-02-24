@@ -61,17 +61,6 @@ SHOPIFY_RESOURCE_KEYS = [
 # ─── DB helpers ──────────────────────────────────────────
 
 
-def _get_tenant_store_url(conn: psycopg2.extensions.connection, tenant_id: int) -> str | None:
-    """Look up the Shopify store URL for a tenant."""
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT shopify_store_url FROM public.tenants WHERE id = %s",
-            (tenant_id,),
-        )
-        row = cur.fetchone()
-    return row[0] if row else None
-
-
 def _upsert_products(conn, schema: str, products: list[dict]) -> dict[str, int]:
     """Upsert product rows into the raw table."""
     if not products:
@@ -82,7 +71,7 @@ def _upsert_products(conn, schema: str, products: list[dict]) -> dict[str, int]:
         "updated_at", "shop_url", "admin_graphql_api_id", "variants", "options",
         "image", "images", "total_inventory", "total_variants",
     ]
-    return upsert_rows(conn, schema, "products", columns, products, conflict_col="id")
+    return upsert_rows(conn, schema, "products", columns, products, conflict_keys=["id"])
 
 
 def _upsert_variants(conn, schema: str, variants: list[dict]) -> dict[str, int]:
@@ -97,7 +86,7 @@ def _upsert_variants(conn, schema: str, variants: list[dict]) -> dict[str, int]:
         "image_id", "image_src", "available_for_sale", "display_name",
         "admin_graphql_api_id", "created_at", "updated_at", "shop_url",
     ]
-    return upsert_rows(conn, schema, "product_variants", columns, variants, conflict_col="id")
+    return upsert_rows(conn, schema, "product_variants", columns, variants, conflict_keys=["id"])
 
 
 def _upsert_customers(conn, schema: str, customers: list[dict]) -> dict[str, int]:
@@ -112,7 +101,7 @@ def _upsert_customers(conn, schema: str, customers: list[dict]) -> dict[str, int
         "admin_graphql_api_id", "created_at", "updated_at", "shop_url",
         "default_address", "addresses", "email_marketing_consent", "sms_marketing_consent",
     ]
-    return upsert_rows(conn, schema, "customers", columns, customers, conflict_col="id")
+    return upsert_rows(conn, schema, "customers", columns, customers, conflict_keys=["id"])
 
 
 def _upsert_orders(conn, schema: str, orders: list[dict]) -> dict[str, int]:
@@ -143,7 +132,7 @@ def _upsert_orders(conn, schema: str, orders: list[dict]) -> dict[str, int]:
         "customer", "billing_address", "shipping_address", "shipping_lines",
         "line_items", "fulfillments", "refunds", "shop_url",
     ]
-    return upsert_rows(conn, schema, "orders", columns, orders, conflict_col="id")
+    return upsert_rows(conn, schema, "orders", columns, orders, conflict_keys=["id"])
 
 
 def _upsert_refunds(conn, schema: str, refunds: list[dict]) -> dict[str, int]:
@@ -155,7 +144,7 @@ def _upsert_refunds(conn, schema: str, refunds: list[dict]) -> dict[str, int]:
         "note", "restock", "user_id", "duties", "shop_url", "return",
         "total_duties_set", "order_adjustments", "refund_line_items", "transactions",
     ]
-    return upsert_rows(conn, schema, "order_refunds", columns, refunds, conflict_col="id")
+    return upsert_rows(conn, schema, "order_refunds", columns, refunds, conflict_keys=["id"])
 
 
 def _truncate_shopify_tables(conn, schema: str) -> None:
@@ -168,7 +157,7 @@ def _truncate_shopify_tables(conn, schema: str) -> None:
     logger.info(f"Truncated Shopify tables in {schema}")
 
 
-def _backfill_refunds(conn, tenant_id: int, store_url: str) -> int:
+def _backfill_refunds(conn, tenant_id: int) -> int:
     """
     Backfill detailed refund data using paginated API.
     
@@ -180,7 +169,8 @@ def _backfill_refunds(conn, tenant_id: int, store_url: str) -> int:
     query_filter = "financial_status:refunded OR financial_status:partially_refunded"
     
     total_orders = 0
-    with ShopifyClient(store_url=store_url) as client:
+    with ShopifyClient(tenant_id=tenant_id, conn=conn) as client:
+        store_url = client.store_domain # Get from client which loaded it from DB
         order_rows, refund_rows = [], []
         
         # Reuse ORDERS_PAGINATED which fetches full details
@@ -207,15 +197,6 @@ def _backfill_refunds(conn, tenant_id: int, store_url: str) -> int:
 def full_sync(tenant_id: int, db_url: str | None = None) -> dict:
     """
     Full sync via Shopify Bulk Operations API.
-    
-    Steps:
-      1. Submit bulk queries for products, customers, orders
-      2. Poll until complete
-      3. Download and stream-parse JSONL files
-      4. Transform and insert into raw tables (after truncating)
-      5. Backfill detailed refund data via paginated API (workaround for Bulk API limits)
-
-    Returns a summary dict with record counts.
     """
     load_dotenv()
     db_url = db_url or get_db_url()
@@ -225,22 +206,16 @@ def full_sync(tenant_id: int, db_url: str | None = None) -> dict:
     try:
         ensure_sync_state_table(conn)
 
-        # Get store URL
-        store_url = _get_tenant_store_url(conn, tenant_id)
-        if not store_url:
-            store_url = os.getenv("SHOPIFY_STORE_URL", "")
-        if not store_url:
-            raise ShopifyClientError("No Shopify store URL configured for this tenant")
-
         # Check for running syncs
         for resource in ["products", "customers", "orders"]:
             if is_sync_running(conn, tenant_id, resource):
                 raise ShopifyClientError(f"Sync already running for {resource}")
 
-        logger.info(f"Starting full sync for tenant {tenant_id} ({store_url})")
+        logger.info(f"Starting full sync for tenant {tenant_id}")
         sync_start = datetime.now(timezone.utc)
 
-        with ShopifyClient(store_url=store_url) as client:
+        with ShopifyClient(tenant_id=tenant_id, conn=conn) as client:
+            store_url = client.store_domain
             bulk = ShopifyBulkClient(client)
             summary = {"mode": "full", "tenant_id": tenant_id}
 
@@ -344,7 +319,7 @@ def full_sync(tenant_id: int, db_url: str | None = None) -> dict:
                 
                 # Backfill detailed refund data via paginated API
                 # (Bulk API cannot fetch nested refund line items/transactions)
-                _backfill_refunds(conn, tenant_id, store_url)
+                _backfill_refunds(conn, tenant_id)
                 
                 mark_sync_completed(conn, tenant_id, "orders", len(order_rows), sync_start)
                 mark_sync_started(conn, tenant_id, "order_refunds")
@@ -371,11 +346,6 @@ def full_sync(tenant_id: int, db_url: str | None = None) -> dict:
 def incremental_sync(tenant_id: int, db_url: str | None = None) -> dict:
     """
     Incremental sync via paginated GraphQL queries.
-
-    Pulls records updated since the last sync and upserts them.
-    If no prior sync exists, falls back to full_sync automatically.
-
-    Returns a summary dict with record counts.
     """
     load_dotenv()
     db_url = db_url or get_db_url()
@@ -392,17 +362,12 @@ def incremental_sync(tenant_id: int, db_url: str | None = None) -> dict:
             conn.close()
             return full_sync(tenant_id, db_url)
 
-        store_url = _get_tenant_store_url(conn, tenant_id)
-        if not store_url:
-            store_url = os.getenv("SHOPIFY_STORE_URL", "")
-        if not store_url:
-            raise ShopifyClientError("No Shopify store URL configured for this tenant")
-
         logger.info(f"Starting incremental sync for tenant {tenant_id}")
         sync_start = datetime.now(timezone.utc)
         summary = {"mode": "incremental", "tenant_id": tenant_id}
 
-        with ShopifyClient(store_url=store_url) as client:
+        with ShopifyClient(tenant_id=tenant_id, conn=conn) as client:
+            store_url = client.store_domain
 
             # ── Products ────────────────────────────
             last_sync = get_last_sync(conn, tenant_id, "products")

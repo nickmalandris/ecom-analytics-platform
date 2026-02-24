@@ -2,7 +2,7 @@
 Shopify GraphQL Admin API client.
 
 Handles:
-  - Authentication via client credentials grant (auto-refresh on expiry)
+  - Authentication via OAuth access tokens (DB-backed) or client credentials (legacy/env)
   - Cost-based rate limiting (leaky bucket, 1000 point max, 50 pts/sec restore)
   - Cursor-based pagination for incremental syncs
   - Retry with exponential backoff on throttle/5xx/401 errors
@@ -14,9 +14,11 @@ import time
 from typing import Any, Generator
 
 import httpx
+import psycopg2
 from dotenv import load_dotenv
 
 from src.ingestion.shopify_queries import API_VERSION
+from src.auth.encryption import decrypt_token
 
 logger = logging.getLogger(__name__)
 
@@ -48,48 +50,53 @@ class ShopifyClient:
     """
     Synchronous GraphQL client for the Shopify Admin API.
 
-    Auth: Uses client credentials grant (SHOPIFY_CLIENT_ID + SHOPIFY_SECRET_KEY)
-    to obtain short-lived access tokens that are automatically refreshed
-    before each request when expired or nearing expiry.
-
-    If an explicit access_token is passed, it is used as-is (no auto-refresh).
+    Auth modes:
+    1. Tenant DB Mode (Recommended): Pass `tenant_id` + `conn`. Fetches encrypted token from DB.
+    2. Static Token Mode: Pass `access_token` + `store_url`. Uses token as-is.
+    3. Legacy Env Mode: Pass nothing. Reads SHOPIFY_CLIENT_ID/_SECRET from env.
     """
 
     def __init__(
         self,
+        tenant_id: int | None = None,
+        conn = None,
         store_url: str | None = None,
         access_token: str | None = None,
     ):
-        raw_url = store_url or os.getenv("SHOPIFY_STORE_URL", "")
-        self.store_domain = self._normalize_domain(raw_url)
-        if not self.store_domain:
-            raise ShopifyClientError(
-                "No Shopify store URL configured. "
-                "Set SHOPIFY_STORE_URL or pass store_url parameter."
-            )
-
+        self.tenant_id = tenant_id
+        self.conn = conn
+        
         # Token state
         self._token: str | None = None
-        self._token_expires_at: float = 0.0  # epoch timestamp
-        self._static_token: bool = False  # True if explicit token, no refresh
+        self._token_expires_at: float = 0.0
+        self._static_token: bool = False
 
-        # Client credentials for auto-refresh
-        self._client_id = os.getenv("SHOPIFY_CLIENT_ID", "").strip()
-        self._client_secret = os.getenv("SHOPIFY_SECRET_KEY", "").strip()
+        # Normalize store_url from arg or env to allow static token mode to use env URL
+        raw_url = store_url or os.getenv("SHOPIFY_STORE_URL", "")
+        self.store_domain = self._normalize_domain(raw_url)
 
-        if access_token:
-            # Explicit token — use as-is, no auto-refresh
+        # 1. Tenant DB Mode
+        if self.tenant_id and self.conn:
+            self._load_from_db()
+        # 2. Static Token Mode
+        elif access_token:
+            if not self.store_domain:
+                raise ShopifyClientError("No Shopify store URL configured")
             self._token = access_token
             self._static_token = True
-            logger.debug("Using explicit access token (no auto-refresh)")
-        elif self._client_id and self._client_secret:
-            # Obtain initial token via client credentials
-            self._refresh_token()
+            logger.debug(f"Using static access token for {self.store_domain}")
+        # 3. Legacy Env Mode
         else:
-            raise ShopifyClientError(
-                "No Shopify credentials configured. "
-                "Set SHOPIFY_CLIENT_ID + SHOPIFY_SECRET_KEY in .env."
-            )
+            self._client_id = os.getenv("SHOPIFY_CLIENT_ID", "").strip()
+            self._client_secret = os.getenv("SHOPIFY_SECRET_KEY", "").strip()
+            
+            if not self.store_domain:
+                raise ShopifyClientError("No Shopify store URL configured")
+            
+            if self._client_id and self._client_secret:
+                self._refresh_legacy_token()
+            else:
+                raise ShopifyClientError("No Shopify credentials configured")
 
         self.graphql_url = (
             f"https://{self.store_domain}/admin/api/{API_VERSION}/graphql.json"
@@ -101,7 +108,25 @@ class ShopifyClient:
         self._available_points: float = 1000.0
         self._restore_rate: float = 50.0
 
-        logger.info(f"Shopify client initialized for {self.store_domain}")
+    def _load_from_db(self):
+        """Fetch store URL and encrypted token from database."""
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "SELECT shopify_store_url, shopify_access_token FROM public.tenants WHERE id = %s",
+                (self.tenant_id,)
+            )
+            row = cur.fetchone()
+            if not row:
+                raise ShopifyClientError(f"Tenant {self.tenant_id} not found")
+            
+            url, encrypted_token = row
+            if not url or not encrypted_token:
+                raise ShopifyClientError(f"Tenant {self.tenant_id} not connected to Shopify")
+            
+            self.store_domain = self._normalize_domain(url)
+            self._token = decrypt_token(encrypted_token)
+            self._static_token = True  # OAuth tokens are permanent
+            logger.info(f"Loaded Shopify credentials for tenant {self.tenant_id} ({self.store_domain})")
 
     @staticmethod
     def _normalize_domain(url: str) -> str:
@@ -111,20 +136,11 @@ class ShopifyClient:
             url = url[8:]
         if url.startswith("http://"):
             url = url[7:]
-        # Remove any path components
         url = url.split("/")[0]
         return url
 
-    def _refresh_token(self) -> None:
-        """
-        Obtain a fresh access token via client credentials grant.
-
-        POST https://{store}/admin/oauth/access_token
-        grant_type=client_credentials&client_id=...&client_secret=...
-
-        Tokens expire in 86399 seconds (24 hours). We store the expiry
-        timestamp and refresh proactively before it expires.
-        """
+    def _refresh_legacy_token(self) -> None:
+        """Legacy client credentials flow."""
         url = f"https://{self.store_domain}/admin/oauth/access_token"
         logger.info(f"Obtaining access token via client credentials for {self.store_domain}")
 
@@ -145,50 +161,31 @@ class ShopifyClient:
             expires_in = data.get("expires_in", 86399)
 
             if not token:
-                raise ShopifyClientError(
-                    f"No access_token in client credentials response: {data}"
-                )
+                raise ShopifyClientError(f"No access_token in response: {data}")
 
             self._token = token
             self._token_expires_at = time.time() + expires_in - TOKEN_EXPIRY_BUFFER_SECONDS
-            logger.info(
-                f"Access token obtained, expires in {expires_in}s "
-                f"(will refresh in {expires_in - TOKEN_EXPIRY_BUFFER_SECONDS}s)"
-            )
 
-        except httpx.HTTPStatusError as e:
-            raise ShopifyClientError(
-                f"Client credentials grant failed: {e.response.status_code} {e.response.text}"
-            )
-        except ShopifyClientError:
-            raise
         except Exception as e:
             raise ShopifyClientError(f"Client credentials grant failed: {e}")
 
     def _get_token(self) -> str:
-        """
-        Return a valid access token, refreshing if needed.
-
-        For static tokens (explicit access_token), returns as-is.
-        For client credentials tokens, checks expiry and refreshes if stale.
-        """
+        """Return a valid access token."""
         if self._static_token:
-            return self._token  # type: ignore
+            if not self._token:
+                raise ShopifyClientError("No access token available")
+            return self._token
 
         if time.time() >= self._token_expires_at:
-            logger.info("Access token expired or nearing expiry, refreshing...")
-            self._refresh_token()
+            logger.info("Legacy token expired, refreshing...")
+            self._refresh_legacy_token()
 
-        return self._token  # type: ignore
+        if not self._token:
+            raise ShopifyClientError("No access token available")
+        return self._token
 
     def _handle_throttle(self, extensions: dict) -> None:
-        """
-        Inspect the cost extensions and sleep if we're running low on points.
-
-        GraphQL responses include:
-            extensions.cost.throttleStatus.currentlyAvailable
-            extensions.cost.throttleStatus.restoreRate
-        """
+        """Inspect cost and sleep if needed."""
         cost = extensions.get("cost", {})
         throttle = cost.get("throttleStatus", {})
         available = throttle.get("currentlyAvailable", self._available_points)
@@ -199,9 +196,7 @@ class ShopifyClient:
 
         if available < THROTTLE_THRESHOLD:
             wait = (THROTTLE_THRESHOLD - available) / restore_rate
-            logger.info(
-                f"Throttle: {available:.0f} points available, sleeping {wait:.1f}s"
-            )
+            logger.info(f"Throttle: {available:.0f} points available, sleeping {wait:.1f}s")
             time.sleep(wait)
 
     def execute(
@@ -209,15 +204,7 @@ class ShopifyClient:
         query: str,
         variables: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """
-        Execute a GraphQL query/mutation with retry and throttle handling.
-
-        Injects a fresh access token into each request. On 401, forces a
-        token refresh and retries once before counting it as a failure.
-
-        Returns the `data` portion of the response.
-        Raises ShopifyClientError on unrecoverable errors.
-        """
+        """Execute a GraphQL query/mutation with retry and throttle handling."""
         payload: dict[str, Any] = {"query": query}
         if variables:
             payload["variables"] = variables
@@ -226,7 +213,6 @@ class ShopifyClient:
         token_refreshed_this_cycle = False
 
         for attempt in range(MAX_RETRIES):
-            # Get a valid token for this request
             token = self._get_token()
 
             try:
@@ -238,64 +224,45 @@ class ShopifyClient:
             except httpx.HTTPError as e:
                 last_error = e
                 delay = RETRY_BASE_DELAY * (2 ** attempt)
-                logger.warning(f"HTTP error (attempt {attempt + 1}): {e}, retrying in {delay}s")
+                logger.warning(f"HTTP error: {e}, retrying in {delay}s")
                 time.sleep(delay)
                 continue
 
-            # Handle 401 — token may have expired mid-sync
             if resp.status_code == 401:
+                # If DB backed, maybe token was revoked. 
+                # If legacy, maybe expired.
                 if not self._static_token and not token_refreshed_this_cycle:
-                    logger.warning("Got 401 Unauthorized, refreshing access token...")
-                    self._refresh_token()
+                    logger.warning("401 Unauthorized, refreshing legacy token...")
+                    self._refresh_legacy_token()
                     token_refreshed_this_cycle = True
-                    continue  # Retry with fresh token (don't increment backoff)
+                    continue
                 else:
-                    raise ShopifyClientError(
-                        f"401 Unauthorized — access token rejected. "
-                        f"Check your SHOPIFY_CLIENT_ID and SHOPIFY_SECRET_KEY."
-                    )
+                    raise ShopifyClientError("401 Unauthorized — Access token rejected/revoked.")
 
-            if resp.status_code == 429:
+            if resp.status_code in (429, 500, 502, 503, 504):
                 delay = RETRY_BASE_DELAY * (2 ** attempt)
-                logger.warning(f"Rate limited (429), retrying in {delay}s")
-                time.sleep(delay)
-                continue
-
-            if resp.status_code >= 500:
-                delay = RETRY_BASE_DELAY * (2 ** attempt)
-                logger.warning(f"Server error ({resp.status_code}), retrying in {delay}s")
+                logger.warning(f"Error {resp.status_code}, retrying in {delay}s")
                 time.sleep(delay)
                 continue
 
             resp.raise_for_status()
             body = resp.json()
 
-            # Handle GraphQL-level errors
             if "errors" in body:
                 errors = body["errors"]
-                # Check for throttle errors
-                if any(
-                    e.get("extensions", {}).get("code") == "THROTTLED"
-                    for e in errors
-                    if isinstance(e, dict)
-                ):
+                if any(e.get("extensions", {}).get("code") == "THROTTLED" for e in errors):
                     delay = RETRY_BASE_DELAY * (2 ** attempt)
                     logger.warning(f"THROTTLED error, retrying in {delay}s")
                     time.sleep(delay)
                     continue
-                raise ShopifyClientError(
-                    f"GraphQL errors: {errors}", errors=errors
-                )
+                raise ShopifyClientError(f"GraphQL errors: {errors}", errors=errors)
 
-            # Handle throttle from extensions
             if "extensions" in body:
                 self._handle_throttle(body["extensions"])
 
             return body.get("data", {})
 
-        raise ShopifyClientError(
-            f"Max retries ({MAX_RETRIES}) exceeded. Last error: {last_error}"
-        )
+        raise ShopifyClientError(f"Max retries ({MAX_RETRIES}) exceeded. Last error: {last_error}")
 
     def paginate(
         self,
@@ -304,18 +271,7 @@ class ShopifyClient:
         variables: dict[str, Any] | None = None,
         query_filter: str | None = None,
     ) -> Generator[list[dict], None, None]:
-        """
-        Auto-paginate a GraphQL query, yielding pages of nodes.
-
-        Args:
-            query: The GraphQL query with $cursor and $query variables.
-            resource_key: Top-level key in data (e.g. "orders", "products").
-            variables: Additional variables to pass.
-            query_filter: Shopify search query string (e.g. "updated_at:>2025-01-01").
-
-        Yields:
-            Lists of node dicts (one list per page).
-        """
+        """Auto-paginate a GraphQL query."""
         cursor: str | None = None
         page = 0
         vars_ = dict(variables or {})
@@ -343,7 +299,6 @@ class ShopifyClient:
             cursor = page_info.get("endCursor")
 
     def close(self) -> None:
-        """Close the HTTP client."""
         self._http.close()
 
     def __enter__(self):

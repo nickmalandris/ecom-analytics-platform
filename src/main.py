@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from src.api.reports import router as reports_router
 from src.api.sync import router as sync_router
 from src.api.tenants import router as tenants_router
+from src.api.auth_flow import router as auth_router
 from src.scheduler.scheduler import start_scheduler, stop_scheduler
 
 # ── Logging ──────────────────────────────────────
@@ -50,6 +51,7 @@ app = FastAPI(
 app.include_router(tenants_router, prefix="/api")
 app.include_router(reports_router, prefix="/api")
 app.include_router(sync_router, prefix="/api")
+app.include_router(auth_router, prefix="/api")
 
 
 @app.get("/health")

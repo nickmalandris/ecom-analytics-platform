@@ -46,6 +46,9 @@ CREATE TABLE IF NOT EXISTS public.tenants (
     meta_account_id VARCHAR(255),
     api_key VARCHAR(255) NOT NULL,
     email_recipients TEXT[],
+    shopify_access_token TEXT,
+    meta_access_token TEXT,
+    meta_token_expires_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );

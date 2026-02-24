@@ -236,6 +236,7 @@ class TestGet:
         client._http.get.side_effect = [expired_resp, success_resp]
 
         with patch.object(client, "_exchange_token") as mock_refresh:
+            mock_refresh.return_value = ("new_token", 6000000)  # > 7 days buffer
             with patch("src.ingestion.meta_client.time.sleep"):
                 result = client.get("act_12345/campaigns")
 

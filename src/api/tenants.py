@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from src.api.auth import require_admin, resolve_tenant
 from src.api.schemas import TenantCreate, TenantResponse, TenantUpdate
+from src.config import settings
 
 router = APIRouter(prefix="/tenants", tags=["tenants"])
 
@@ -41,7 +42,7 @@ def _row_to_tenant(row: tuple) -> TenantResponse:
     )
 
 
-# ── Tenant-scoped (own data) ────────────────────
+# ─── Tenant-scoped (own data) ────────────────────
 
 @router.get("/me", response_model=TenantResponse)
 def get_own_tenant(tenant: dict = Depends(resolve_tenant)):
@@ -67,7 +68,7 @@ def get_own_tenant(tenant: dict = Depends(resolve_tenant)):
     return _row_to_tenant(row)
 
 
-# ── Admin endpoints ──────────────────────────────
+# ─── Admin endpoints ──────────────────────────────
 
 @router.get("", response_model=list[TenantResponse])
 def list_tenants(_admin: dict = Depends(require_admin)):
@@ -106,6 +107,25 @@ def get_tenant(tenant_id: int, _admin: dict = Depends(require_admin)):
     if not row:
         raise HTTPException(status_code=404, detail="Tenant not found")
     return _row_to_tenant(row)
+
+
+@router.get("/{tenant_id}/auth-links")
+def get_auth_links(tenant_id: int, _admin: dict = Depends(require_admin)):
+    """Get the authorization links for Shopify and Meta (admin only)."""
+    # Verify tenant exists
+    conn = psycopg2.connect(_get_db_url())
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id FROM public.tenants WHERE id = %s", (tenant_id,))
+            if not cur.fetchone():
+                raise HTTPException(status_code=404, detail="Tenant not found")
+    finally:
+        conn.close()
+
+    return {
+        "shopify": f"{settings.app_base_url}/api/auth/shopify/initiate/{tenant_id}?shop={{SHOP_DOMAIN}}",
+        "meta": f"{settings.app_base_url}/api/auth/meta/initiate/{tenant_id}"
+    }
 
 
 @router.post("", response_model=TenantResponse, status_code=201)

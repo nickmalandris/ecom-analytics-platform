@@ -8,8 +8,12 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # App
+    app_base_url: str = "http://localhost:8000"
+
     # Database
     database_url: str
+    encryption_key: str = ""
 
     # LLM
     llm_provider: str = "openai"

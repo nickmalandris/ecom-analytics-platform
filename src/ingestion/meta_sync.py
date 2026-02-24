@@ -45,17 +45,6 @@ META_RESOURCE_KEYS = [
 # ─── DB helpers ──────────────────────────────────────────
 
 
-def _get_tenant_meta_account_id(conn, tenant_id: int) -> str | None:
-    """Look up the Meta Ad Account ID for a tenant."""
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT meta_account_id FROM public.tenants WHERE id = %s",
-            (tenant_id,),
-        )
-        row = cur.fetchone()
-    return row[0] if row else None
-
-
 def _upsert_campaigns(conn, schema: str, rows: list[dict]) -> dict[str, int]:
     """Upsert campaign rows."""
     if not rows:
@@ -210,7 +199,6 @@ def full_sync(tenant_id: int, db_url: str | None = None) -> dict:
 
     try:
         ensure_sync_state_table(conn)
-        ad_account_id = _get_tenant_meta_account_id(conn, tenant_id)
         
         logger.info(f"Starting Meta full sync for tenant {tenant_id}")
         sync_start = datetime.now(timezone.utc)
@@ -223,7 +211,7 @@ def full_sync(tenant_id: int, db_url: str | None = None) -> dict:
         conn.commit()
         logger.info(f"Truncated Meta tables in {schema}")
 
-        with MetaClient(ad_account_id=ad_account_id) as client:
+        with MetaClient(tenant_id=tenant_id, conn=conn) as client:
             _sync_entities(client, conn, schema, tenant_id, summary, sync_start)
             _sync_insights(client, conn, schema, tenant_id, summary, sync_start, date_preset="lifetime")
 
@@ -246,13 +234,12 @@ def incremental_sync(tenant_id: int, db_url: str | None = None) -> dict:
 
     try:
         ensure_sync_state_table(conn)
-        ad_account_id = _get_tenant_meta_account_id(conn, tenant_id)
 
         logger.info(f"Starting Meta incremental sync for tenant {tenant_id}")
         sync_start = datetime.now(timezone.utc)
         summary = {"mode": "incremental", "tenant_id": tenant_id, "source": "Meta"}
 
-        with MetaClient(ad_account_id=ad_account_id) as client:
+        with MetaClient(tenant_id=tenant_id, conn=conn) as client:
             _sync_entities(client, conn, schema, tenant_id, summary, sync_start)
             # 7-day lookback for attribution window changes
             _sync_insights(client, conn, schema, tenant_id, summary, sync_start, date_preset="last_7d")
