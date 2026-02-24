@@ -124,7 +124,9 @@ async def shopify_auth_callback(request: Request):
     finally:
         conn.close()
 
-    return JSONResponse(content={"status": "success", "message": "Shopify connected successfully"})
+    # Redirect to UI with success status
+    redirect_url = f"{settings.app_base_url}/onboarding?status=shopify_success&tenant_id={tenant_id}"
+    return RedirectResponse(redirect_url)
 
 
 # ─── Meta OAuth ─────────────────────────────────────────
@@ -217,4 +219,6 @@ async def meta_auth_callback(code: str, state: str):
     finally:
         conn.close()
 
-    return JSONResponse(content={"status": "success", "message": "Meta connected successfully"})
+    # Redirect to UI with success status
+    redirect_url = f"{settings.app_base_url}/onboarding?status=meta_success&tenant_id={tenant_id}"
+    return RedirectResponse(redirect_url)

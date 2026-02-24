@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connect Your Store</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Connect Your Accounts</h1>
+
+        <!-- Step 1: Shopify -->
+        <div id="step-shopify" class="step">
+            <p>Connect your Shopify store to get started.</p>
+            <form id="shopify-form">
+                <input type="text" id="shop-domain" placeholder="your-store.myshopify.com" required>
+                <button type="submit" id="shopify-connect-btn">Connect Shopify</button>
+            </form>
+        </div>
+
+        <!-- Step 2: Meta (Hidden initially) -->
+        <div id="step-meta" class="step hidden">
+            <p>Great! Now connect your Meta Ads account.</p>
+            <a id="meta-connect-btn" class="btn btn-meta" href="#">Connect with Facebook</a>
+        </div>
+
+        <!-- Step 3: Success -->
+        <div id="step-success" class="step hidden">
+            <h2>Success!</h2>
+            <p>Your accounts are connected. You can close this window.</p>
+        </div>
+
+        <!-- Status Messages -->
+        <div id="status-area" class="status-message" style="display: none;"></div>
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>

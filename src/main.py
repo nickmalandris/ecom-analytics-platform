@@ -9,7 +9,10 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
+from src.api.auth_flow import router as auth_router
+from src.api.onboarding import router as onboarding_router
 from src.api.reports import router as reports_router
 from src.api.sync import router as sync_router
 from src.api.tenants import router as tenants_router
@@ -52,6 +55,10 @@ app.include_router(tenants_router, prefix="/api")
 app.include_router(reports_router, prefix="/api")
 app.include_router(sync_router, prefix="/api")
 app.include_router(auth_router, prefix="/api/auth")
+app.include_router(onboarding_router)
+
+# Mount static files
+app.mount("/static", StaticFiles(directory="src/ui/static"), name="static")
 
 
 @app.get("/health")
