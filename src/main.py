@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from src.api.auth_flow import router as auth_router
+from src.api.connections import router as connections_router
 from src.api.onboarding import router as onboarding_router
 from src.api.reports import router as reports_router
 from src.api.sync import router as sync_router
@@ -56,6 +57,7 @@ app.include_router(reports_router, prefix="/api")
 app.include_router(sync_router, prefix="/api")
 app.include_router(auth_router, prefix="/api/auth")
 app.include_router(users_router) # /auth and /users endpoints are self-contained
+app.include_router(connections_router, prefix="/api")
 app.include_router(onboarding_router)
 
 # Mount static files
