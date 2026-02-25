@@ -1,21 +1,32 @@
 // frontend/src/pages/Connectors.tsx
 import { useEffect, useState } from 'react';
 import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import Layout from '../components/Layout';
 
 interface ConnectionStatus {
   shopify: { connected: boolean; store_url?: string };
   meta: { connected: boolean; account_id?: string };
-  tenant_id: number;
+  tenant_id: number | null;
 }
 
 export default function Connectors() {
   const [status, setStatus] = useState<ConnectionStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const location = useLocation();
 
-  // Poll for status updates every 5 seconds
+  // Handle OAuth Redirect Status
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const authStatus = params.get('status');
+    if (authStatus === 'shopify_success') {
+      // Clear URL params
+      navigate('/connectors', { replace: true });
+    }
+  }, [location, navigate]);
+
+  // Poll for status updates
   useEffect(() => {
     let intervalId: any;
 
@@ -26,7 +37,6 @@ export default function Connectors() {
         setLoading(false);
       } catch (err) {
         console.error('Failed to fetch connection status', err);
-        // If 401, redirect to login
         if (axios.isAxiosError(err) && err.response?.status === 401) {
           navigate('/login');
         }
@@ -47,20 +57,23 @@ export default function Connectors() {
     if (!shopUrl) return;
 
     try {
-        // We'll reuse the auth initiation endpoint but need to know the tenant ID
-        // The backend should probably provide a "me" endpoint for connections 
-        // that handles the tenant ID lookup from the user session.
-        // For now, we'll assume we get the tenant_id from the status response.
-        if (status?.tenant_id) {
-             window.location.href = `/api/auth/shopify/initiate/${status.tenant_id}?shop=${shopUrl}`;
+        // Send shop URL to backend to initiate connection (and create tenant if needed)
+        const response = await axios.post('/api/connections/shopify/initiate', {
+            shopify_store_url: shopUrl
+        });
+        
+        if (response.data.redirect_url) {
+            window.location.href = response.data.redirect_url;
         }
     } catch (err) {
-        console.error(err);
+        console.error("Failed to initiate Shopify connection", err);
+        alert("Failed to connect to Shopify. Please try again.");
     }
   };
 
   const handleConnectMeta = () => {
       if (status?.tenant_id) {
+          // We can use the existing auth link endpoint since we have a tenant_id now
           window.location.href = `/api/auth/meta/initiate/${status.tenant_id}`;
       }
   }
@@ -141,7 +154,7 @@ export default function Connectors() {
               </p>
               <button
                 onClick={handleConnectMeta}
-                disabled={!status?.shopify.connected} // Enforce order: Shopify first (to ensure tenant exists? Actually user exists now, so order matters less, but good for flow)
+                disabled={!status?.shopify.connected} 
                 className={`w-full rounded-md px-3 py-2 text-sm font-semibold text-white ${
                     !status?.shopify.connected 
                     ? 'bg-gray-300 cursor-not-allowed' 
