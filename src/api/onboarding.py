@@ -54,33 +54,22 @@ async def initiate_shopify_connection(body: ShopifyConnectRequest):
     
     try:
         with conn.cursor() as cur:
-            # Check if tenant exists
+            # Always create a new tenant — never reuse an existing one
+            # by shop URL, as that would leak data between users.
+            logger.info(f"Creating new tenant for {shop_url}")
+            api_key = _generate_api_key()
             cur.execute(
-                "SELECT id FROM public.tenants WHERE shopify_store_url = %s",
-                (shop_url,)
+                """
+                INSERT INTO public.tenants (name, shopify_store_url, api_key)
+                VALUES (%s, %s, %s)
+                RETURNING id
+                """,
+                (shop_url, shop_url, api_key)
             )
-            row = cur.fetchone()
+            tenant_id = cur.fetchone()[0]
 
-            if row:
-                tenant_id = row[0]
-                logger.info(f"Found existing tenant {tenant_id} for {shop_url}")
-            else:
-                # Create new tenant
-                logger.info(f"Creating new tenant for {shop_url}")
-                api_key = _generate_api_key()
-                # Name defaults to shop domain for now
-                cur.execute(
-                    """
-                    INSERT INTO public.tenants (name, shopify_store_url, api_key)
-                    VALUES (%s, %s, %s)
-                    RETURNING id
-                    """,
-                    (shop_url, shop_url, api_key)
-                )
-                tenant_id = cur.fetchone()[0]
-                
-                # Create schema and tables
-                create_tenant_schema_and_tables(conn, tenant_id)
+            # Create schema and tables
+            create_tenant_schema_and_tables(conn, tenant_id)
         
         conn.commit()
     except Exception as e:

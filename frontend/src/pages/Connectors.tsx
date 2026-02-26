@@ -72,7 +72,7 @@ export default function Connectors() {
           // Refresh connection status
           const statusRes = await axios.get('/api/connections/status');
           setStatus(statusRes.data);
-        } else if (data.failed) {
+        } else if (data.failed && !data.syncing) {
           setConnectState('error');
           setErrorMsg('Data sync failed. Please try again.');
           clearInterval(pollRef.current!);

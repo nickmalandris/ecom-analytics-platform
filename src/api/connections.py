@@ -160,26 +160,17 @@ async def connect_shopify(
                 logger.info("Creating tenant for user %s, shop %s", user.id, shop_url)
                 api_key = _generate_api_key()
 
-                # Check for existing tenant with this shop
+                # Always create a new tenant — never reuse an existing one
+                # by shop URL, as that would leak data between users.
                 cur.execute(
-                    "SELECT id FROM public.tenants WHERE shopify_store_url = %s",
-                    (shop_url,),
+                    """
+                    INSERT INTO public.tenants (name, shopify_store_url, api_key)
+                    VALUES (%s, %s, %s)
+                    RETURNING id
+                    """,
+                    (shop_url, shop_url, api_key),
                 )
-                existing = cur.fetchone()
-
-                if existing:
-                    tenant_id = existing[0]
-                    logger.info("Found existing tenant %s for shop %s", tenant_id, shop_url)
-                else:
-                    cur.execute(
-                        """
-                        INSERT INTO public.tenants (name, shopify_store_url, api_key)
-                        VALUES (%s, %s, %s)
-                        RETURNING id
-                        """,
-                        (shop_url, shop_url, api_key),
-                    )
-                    tenant_id = cur.fetchone()[0]
+                tenant_id = cur.fetchone()[0]
 
                 # Link user to tenant
                 cur.execute(
@@ -254,26 +245,19 @@ async def initiate_shopify_connection(
         with conn.cursor() as cur:
             if not tenant_id:
                 api_key = _generate_api_key()
-                cur.execute(
-                    "SELECT id FROM public.tenants WHERE shopify_store_url = %s",
-                    (shop_url,),
-                )
-                existing = cur.fetchone()
 
-                if existing:
-                    tenant_id = existing[0]
-                    create_tenant_schema_and_tables(conn, tenant_id)
-                else:
-                    cur.execute(
-                        """
-                        INSERT INTO public.tenants (name, shopify_store_url, api_key)
-                        VALUES (%s, %s, %s)
-                        RETURNING id
-                        """,
-                        (shop_url, shop_url, api_key),
-                    )
-                    tenant_id = cur.fetchone()[0]
-                    create_tenant_schema_and_tables(conn, tenant_id)
+                # Always create a new tenant — never reuse an existing one
+                # by shop URL, as that would leak data between users.
+                cur.execute(
+                    """
+                    INSERT INTO public.tenants (name, shopify_store_url, api_key)
+                    VALUES (%s, %s, %s)
+                    RETURNING id
+                    """,
+                    (shop_url, shop_url, api_key),
+                )
+                tenant_id = cur.fetchone()[0]
+                create_tenant_schema_and_tables(conn, tenant_id)
 
                 cur.execute(
                     "UPDATE users SET tenant_id = %s WHERE id = %s",
