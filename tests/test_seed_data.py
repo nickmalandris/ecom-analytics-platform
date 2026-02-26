@@ -108,8 +108,8 @@ class TestSeedDataIntegrity:
             cur.execute(f"SELECT count(*) FROM tenant_{TENANT_ID}.ads_insights")
             count = cur.fetchone()[0]
         if is_seeded:
-            # --days 7 produces ~301 insights, --days 90 produces ~2529
-            assert count >= 200, f"Expected at least 200 insights, got {count}"
+            # --days 7 produces ~175 insights (25 ads × 7 days), --days 90 produces ~2529
+            assert count >= 100, f"Expected at least 100 insights, got {count}"
         else:
             assert count >= 0
 
