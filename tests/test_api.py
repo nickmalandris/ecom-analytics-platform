@@ -70,7 +70,7 @@ class TestTenantEndpoints:
                 "email_recipients": ["test@example.com"],
             },
         )
-        assert resp.status_code == 201
+        assert resp.status_code == 201, f"Expected 201, got {resp.status_code}: {resp.text}"
         data = resp.json()
         assert data["name"] == "Test Tenant Pytest"
         assert data["api_key"].startswith("sk_")
