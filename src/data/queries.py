@@ -8,6 +8,9 @@ dicts/lists suitable for LLM consumption.
 
 from datetime import date, timedelta
 
+import psycopg2
+import psycopg2.errors
+
 
 def _schema(tenant_id: int) -> str:
     return f"tenant_{tenant_id}"
@@ -326,3 +329,61 @@ def compare_periods(
             "change_pct": pct_change(current_blended["blended_cac"], previous_blended["blended_cac"]),
         },
     }
+
+
+def get_metric_series(
+    conn,
+    tenant_id: int,
+    table: str,
+    metric_expr: str,
+    date_col: str,
+    days: int = 90
+) -> list[tuple[date, float]]:
+    """
+    Get daily time-series data for a metric.
+    
+    Args:
+        conn: Database connection
+        tenant_id: ID of the tenant
+        table: Table name (without schema)
+        metric_expr: SQL expression for the metric (e.g. "total_revenue" or "SUM(clicks)")
+        date_col: Column name for the date
+        days: Number of days to look back (default 90)
+    
+    Returns:
+        List of (date, value) tuples sorted by date asc.
+    """
+    s = _schema(tenant_id)
+    start_date = date.today() - timedelta(days=days)
+    
+    with conn.cursor() as cur:
+        # Check if aggregation is likely needed (if expression contains parens)
+        # This is a simple heuristic. A better way is to always Group By date.
+        
+        query = f"""
+            SELECT {date_col}, {metric_expr}
+            FROM {s}.{table}
+            WHERE {date_col} >= %s
+            GROUP BY {date_col}
+            ORDER BY {date_col} ASC
+        """
+        try:
+            cur.execute(query, (start_date,))
+        except psycopg2.errors.GroupingError:
+             # Fallback if not an aggregate expression but group by was forced
+             # Actually, if we pass a raw column "total_revenue" and Group By date, 
+             # Postgres requires it to be in Group By or aggregated.
+             # So we must strictly pass aggregate expressions like "SUM(revenue)" 
+             # OR ensure the table is already unique by date.
+             conn.rollback()
+             # If table is unique by date (like mart_daily_blended), we can simple select.
+             # But to be safe and support CVR, we should encourage aggregate expressions.
+             # For pre-aggregated marts, SUM(val) or MAX(val) works fine if there's only 1 row.
+             raise
+             
+        rows = cur.fetchall()
+        
+        # Convert to list of (date, float)
+        return [(row[0], float(row[1]) if row[1] is not None else 0.0) for row in rows]
+
+

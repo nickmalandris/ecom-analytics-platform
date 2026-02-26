@@ -7,9 +7,10 @@ from typing import AsyncGenerator
 
 from fastapi import Depends
 from fastapi_users.db import SQLAlchemyBaseUserTable, SQLAlchemyUserDatabase
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
+from fastapi_users_db_sqlalchemy import SQLAlchemyBaseOAuthAccountTable
+from sqlalchemy import DateTime, ForeignKey, Integer, String
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from src.config import settings
 
@@ -27,20 +28,31 @@ class Base(DeclarativeBase):
     pass
 
 
+# ─── OAuth Account Model ────────────────────────────────
+
+class OAuthAccount(SQLAlchemyBaseOAuthAccountTable[int], Base):
+    __tablename__ = "oauth_account"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="cascade"), nullable=False
+    )
+
+
 # ─── User Model ──────────────────────────────────────────
 
 class User(SQLAlchemyBaseUserTable[int], Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    # Removing ForeignKey("tenants.id") temporarily because SQLAlchemy can't see the tenants table
-    # since it was created via raw SQL/psycopg2, not SQLAlchemy metadata.
-    # We'll enforce this relationship at the application level for now.
     tenant_id: Mapped[int] = mapped_column(Integer, nullable=True)
-    
-    # Custom fields can be added here if needed
+
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), default=datetime.datetime.now(datetime.timezone.utc)
+    )
+
+    oauth_accounts: Mapped[list[OAuthAccount]] = relationship(
+        "OAuthAccount", lazy="joined", cascade="all, delete-orphan"
     )
 
 
@@ -52,4 +64,4 @@ async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def get_user_db(session: AsyncSession = Depends(get_async_session)):
-    yield SQLAlchemyUserDatabase(session, User)
+    yield SQLAlchemyUserDatabase(session, User, OAuthAccount)

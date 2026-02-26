@@ -12,7 +12,6 @@ import pytest
 from src.ingestion.shopify_transform import (
     _money_set,
     _money_amount,
-    _airbyte_columns,
     _edges_to_list,
     extract_gid,
     extract_gid_str,
@@ -71,24 +70,6 @@ class TestMoneyHelpers:
 
     def test_money_amount_none(self):
         assert _money_amount(None) is None
-
-
-# ─── Airbyte columns ────────────────────────────────────
-
-class TestAirbyteColumns:
-    def test_has_required_keys(self):
-        cols = _airbyte_columns()
-        assert "_airbyte_raw_id" in cols
-        assert "_airbyte_extracted_at" in cols
-        assert "_airbyte_meta" in cols
-
-    def test_raw_id_is_uuid_format(self):
-        cols = _airbyte_columns()
-        assert len(cols["_airbyte_raw_id"]) == 36  # UUID format
-
-    def test_meta_has_changes(self):
-        cols = _airbyte_columns()
-        assert cols["_airbyte_meta"] == {"changes": []}
 
 
 # ─── Edges helper ────────────────────────────────────────
@@ -195,7 +176,6 @@ class TestTransformProduct:
             "status", "tags", "published_at", "created_at", "updated_at",
             "shop_url", "admin_graphql_api_id", "variants", "options",
             "image", "images", "total_inventory", "total_variants",
-            "_airbyte_raw_id", "_airbyte_extracted_at", "_airbyte_meta",
         ]
         for col in required:
             assert col in row, f"Missing column: {col}"
@@ -225,10 +205,6 @@ class TestTransformProduct:
         assert v["weight_unit"] is None  # Removed from API in newer versions
         assert v["requires_shipping"] is None  # Removed from API in newer versions
         assert v["inventory_policy"] == "deny"
-
-    def test_variant_has_airbyte_columns(self):
-        _, variants = transform_product(MOCK_PRODUCT, SHOP_URL)
-        assert "_airbyte_raw_id" in variants[0]
 
     def test_product_variants_jsonb_is_list(self):
         row, _ = transform_product(MOCK_PRODUCT, SHOP_URL)
@@ -294,7 +270,6 @@ class TestTransformCustomer:
             "last_order_id", "last_order_name", "accepts_marketing",
             "default_address", "email_marketing_consent",
             "created_at", "updated_at", "shop_url",
-            "_airbyte_raw_id", "_airbyte_extracted_at", "_airbyte_meta",
         ]
         for col in required:
             assert col in row, f"Missing column: {col}"
@@ -450,7 +425,6 @@ class TestTransformOrder:
             "subtotal_price", "total_tax", "total_discounts",
             "total_shipping_price_set", "line_items", "customer",
             "billing_address", "shipping_address",
-            "_airbyte_raw_id", "_airbyte_extracted_at", "_airbyte_meta",
         ]
         for col in critical:
             assert col in row, f"Missing column: {col}"
@@ -586,7 +560,6 @@ class TestTransformOrderWithRefund:
         assert r["order_id"] == 9001
         assert r["note"] == "Wrong size"
         assert r["shop_url"] == SHOP_URL
-        assert "_airbyte_raw_id" in r
 
     def test_refund_line_items(self):
         _, refund_rows = transform_order(MOCK_ORDER_WITH_REFUND, SHOP_URL)

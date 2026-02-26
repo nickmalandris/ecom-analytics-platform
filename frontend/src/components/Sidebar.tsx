@@ -1,8 +1,21 @@
-// frontend/src/components/Sidebar.tsx
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import {
+  LayoutDashboard,
+  MessageSquare,
+  Plug,
+  LogOut,
+  BarChart3,
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
 
-export default function Sidebar() {
+const NAV_ITEMS = [
+  { path: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { path: '/chat', label: 'Assistant', icon: MessageSquare },
+  { path: '/connectors', label: 'Connectors', icon: Plug },
+];
+
+export default function Sidebar({ email }: { email?: string }) {
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -15,47 +28,64 @@ export default function Sidebar() {
     }
   };
 
-  const menuItems = [
-    { path: '/', label: 'Dashboard', icon: '📊' },
-    { path: '/connectors', label: 'Connectors', icon: '🔌' },
-  ];
+  const initials = email
+    ? email.slice(0, 2).toUpperCase()
+    : '??';
 
   return (
-    <div className="flex h-screen flex-col justify-between border-r bg-white w-64">
-      <div className="px-4 py-6">
-        <span className="grid h-10 w-32 place-content-center rounded-lg bg-gray-100 text-xs text-gray-600">
-          Analytics
-        </span>
-
-        <ul className="mt-6 space-y-1">
-          {menuItems.map((item) => (
-            <li key={item.path}>
-              <Link
-                to={item.path}
-                className={`block rounded-lg px-4 py-2 text-sm font-medium ${
-                  location.pathname === item.path
-                    ? 'bg-gray-100 text-gray-700'
-                    : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-                }`}
-              >
-                <span className="mr-2">{item.icon}</span>
-                {item.label}
-              </Link>
-            </li>
-          ))}
-        </ul>
+    <aside className="flex h-screen w-[240px] flex-col bg-sidebar text-sidebar-foreground">
+      {/* Logo */}
+      <div className="flex items-center gap-2.5 px-5 py-5">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand">
+          <BarChart3 className="h-4.5 w-4.5 text-white" />
+        </div>
+        <span className="text-[15px] font-semibold tracking-tight">Analytics</span>
       </div>
 
-      <div className="sticky inset-x-0 bottom-0 border-t border-gray-100">
+      {/* Separator */}
+      <div className="mx-4 border-t border-sidebar-border" />
+
+      {/* Navigation */}
+      <nav className="flex-1 px-3 py-4">
+        <ul className="space-y-1">
+          {NAV_ITEMS.map(({ path, label, icon: Icon }) => {
+            const isActive = location.pathname === path;
+            return (
+              <li key={path}>
+                <Link
+                  to={path}
+                  className={cn(
+                    'flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors',
+                    isActive
+                      ? 'bg-sidebar-active text-white'
+                      : 'text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-foreground'
+                  )}
+                >
+                  <Icon className="h-4 w-4 flex-shrink-0" />
+                  {label}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
+
+      {/* User section */}
+      <div className="border-t border-sidebar-border px-3 py-3">
         <button
           onClick={handleLogout}
-          className="flex items-center gap-2 bg-white p-4 hover:bg-gray-50 w-full text-left"
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium text-sidebar-muted transition-colors hover:bg-sidebar-hover hover:text-sidebar-foreground"
         >
-          <div className="text-xs">
-            <p className="font-medium text-gray-500">Sign out</p>
+          {/* Avatar */}
+          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-brand/20 text-[10px] font-bold text-brand-light">
+            {initials}
           </div>
+          <div className="flex-1 text-left">
+            <p className="truncate text-[12px] text-sidebar-muted">{email || 'User'}</p>
+          </div>
+          <LogOut className="h-3.5 w-3.5 flex-shrink-0 opacity-60" />
         </button>
       </div>
-    </div>
+    </aside>
   );
 }

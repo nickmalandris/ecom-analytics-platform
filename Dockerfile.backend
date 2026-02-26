@@ -1,0 +1,44 @@
+# Use an official lightweight Python image
+FROM python:3.13-slim
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PORT=8000
+
+# Create and set working directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv (astral-sh/uv)
+RUN pip install uv
+
+# Copy uv dependency files
+COPY pyproject.toml uv.lock ./
+
+# Install dependencies into system Python (no virtualenv needed in Docker)
+RUN uv pip install --system --no-cache -r pyproject.toml
+
+# Copy application source code
+COPY src/ ./src/
+COPY sql/ ./sql/
+COPY alembic.ini ./alembic.ini
+COPY alembic_public/ ./alembic_public/
+COPY alembic_tenants/ ./alembic_tenants/
+COPY scripts/ ./scripts/
+
+# Create a non-root user and switch to it
+RUN addgroup --system appgroup && adduser --system --group appgroup \
+    && chown -R appgroup:appgroup /app
+USER appgroup
+
+# Expose port
+EXPOSE 8000
+
+# Start Uvicorn
+CMD ["uv", "run", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]

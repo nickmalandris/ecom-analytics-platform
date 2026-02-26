@@ -1,4 +1,4 @@
-"""Generate Meta Ads seed data matching Airbyte's output schema."""
+"""Generate Meta Ads seed data."""
 
 import random
 from datetime import date, datetime, timedelta, timezone
@@ -7,8 +7,6 @@ import numpy as np
 
 from scripts.generators.helpers import (
     action_stats_list,
-    airbyte_meta,
-    generate_uuid,
     jitter,
     next_id,
     round_money,
@@ -224,9 +222,6 @@ def generate_campaigns(start_date: date) -> list[dict]:
             "special_ad_category_country": [],
             "adlabels": [],
             "issues_info": [],
-            "_airbyte_raw_id": generate_uuid(),
-            "_airbyte_extracted_at": to_iso(datetime.now(timezone.utc)),
-            "_airbyte_meta": airbyte_meta(),
             # Internal metadata
             "_cdef": cdef,
         })
@@ -283,9 +278,6 @@ def generate_ad_sets(campaigns: list[dict], start_date: date) -> list[dict]:
                 "learning_stage_info": {
                     "status": "SUCCESS",
                 },
-                "_airbyte_raw_id": generate_uuid(),
-                "_airbyte_extracted_at": to_iso(datetime.now(timezone.utc)),
-                "_airbyte_meta": airbyte_meta(),
                 # Internal
                 "_campaign_name": campaign["name"],
                 "_cdef": cdef,
@@ -344,9 +336,6 @@ def generate_ads(ad_sets: list[dict]) -> list[dict]:
                 ],
                 "adlabels": [],
                 "recommendations": [],
-                "_airbyte_raw_id": generate_uuid(),
-                "_airbyte_extracted_at": to_iso(datetime.now(timezone.utc)),
-                "_airbyte_meta": airbyte_meta(),
                 # Internal
                 "_campaign_name": ad_set["_campaign_name"],
                 "_cdef": cdef,
@@ -577,9 +566,6 @@ def generate_ads_insights(
                 "outbound_clicks": action_stats_list({"outbound_click": raw["link_clicks"]}),
                 "created_time": date_str,
                 "updated_time": date_str,
-                "_airbyte_raw_id": generate_uuid(),
-                "_airbyte_extracted_at": to_iso(datetime.now(timezone.utc)),
-                "_airbyte_meta": airbyte_meta(),
             }
             insights.append(insight_row)
 

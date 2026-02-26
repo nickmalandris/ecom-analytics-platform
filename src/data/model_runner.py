@@ -45,6 +45,7 @@ MART_MODELS = [
     "marts/mart_daily_blended_performance.sql",  # Depends on stg_shopify_orders, stg_meta_ad_insights, stg_shopify_refunds
     "marts/mart_product_performance.sql",   # Depends on stg_shopify_order_lines, stg_shopify_refunds
     "marts/mart_customer_cohorts.sql",      # Depends on stg_shopify_orders
+    "marts/mart_customer_ltv.sql",          # Depends on stg_shopify_orders
 ]
 
 ALL_MODELS = STAGING_MODELS + MART_MODELS
@@ -124,6 +125,51 @@ def run_model(conn, sql_path: Path, schema: str) -> tuple[str, float]:
     elapsed = time.time() - t0
 
     return model_name, elapsed
+
+
+def refresh_models(tenant_id: int, db_url: str | None = None) -> dict:
+    """
+    Programmatic entry point: refresh all staging + mart views for a tenant.
+
+    Called automatically after a data sync completes so the dashboard
+    always reflects the latest raw data.
+
+    Returns {"models_run": N, "elapsed_seconds": X}.
+    """
+    import logging
+    _logger = logging.getLogger(__name__)
+
+    if db_url is None:
+        db_url = get_db_url()
+
+    schema = f"tenant_{tenant_id}"
+    conn = psycopg2.connect(db_url)
+    try:
+        total_time = 0.0
+        count = 0
+        for model_path_str in ALL_MODELS:
+            sql_path = SQL_DIR / model_path_str
+            if not sql_path.exists():
+                _logger.warning("Model file not found: %s", sql_path)
+                continue
+            try:
+                model_name, elapsed = run_model(conn, sql_path, schema)
+                total_time += elapsed
+                count += 1
+                _logger.info("Refreshed %s (%.2fs)", model_name, elapsed)
+            except Exception as e:
+                # Log but continue — some models may fail if upstream data
+                # is missing (e.g., Meta staging when only Shopify is connected)
+                conn.rollback()
+                _logger.warning("Model %s failed: %s", sql_path.stem, e)
+
+        _logger.info(
+            "Model refresh complete for tenant %s: %d models in %.2fs",
+            tenant_id, count, total_time,
+        )
+        return {"models_run": count, "elapsed_seconds": round(total_time, 2)}
+    finally:
+        conn.close()
 
 
 def verify_models(conn, schema: str):

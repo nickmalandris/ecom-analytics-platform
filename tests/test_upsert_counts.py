@@ -192,21 +192,36 @@ class TestUpsertCounts:
             rows = cur.fetchall()
         assert rows == [(50, "Modified"), (51, "New Item")]
 
-    def test_unchanged_preserves_data(self, conn):
-        """Unchanged rows should not be modified in the database."""
-        self._truncate(conn)
-        rows = [{"id": 60, "title": "Keep Me", "updated_at": "2026-01-01T00:00:00Z"}]
-        upsert_rows(conn, TEST_SCHEMA, "test_items", ["id", "title", "updated_at"], rows)
-
-        # Upsert identical data
-        result = upsert_rows(
-            conn, TEST_SCHEMA, "test_items", ["id", "title", "updated_at"], rows
-        )
-        assert result["unchanged"] == 1
-
+    def test_composite_key(self, conn):
+        """Should handle composite primary keys."""
+        schema = TEST_SCHEMA
+        table = "test_composite"
         with conn.cursor() as cur:
-            cur.execute(f"SELECT title FROM {TEST_SCHEMA}.test_items WHERE id = 60")
-            assert cur.fetchone()[0] == "Keep Me"
+            cur.execute(
+                f"""
+                CREATE TABLE {schema}.{table} (
+                    k1 INT,
+                    k2 INT,
+                    val TEXT,
+                    PRIMARY KEY (k1, k2)
+                )
+                """
+            )
+        conn.commit()
+
+        # Insert
+        rows = [{"k1": 1, "k2": 1, "val": "A"}, {"k1": 1, "k2": 2, "val": "B"}]
+        res = upsert_rows(
+            conn, schema, table, ["k1", "k2", "val"], rows, conflict_keys=["k1", "k2"]
+        )
+        assert res == {"inserted": 2, "updated": 0, "unchanged": 0}
+
+        # Update one, leave one unchanged
+        rows = [{"k1": 1, "k2": 1, "val": "A_updated"}, {"k1": 1, "k2": 2, "val": "B"}]
+        res = upsert_rows(
+            conn, schema, table, ["k1", "k2", "val"], rows, conflict_keys=["k1", "k2"]
+        )
+        assert res == {"inserted": 0, "updated": 1, "unchanged": 1}
 
 
 class TestFmtCounts:

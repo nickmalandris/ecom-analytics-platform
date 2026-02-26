@@ -2,7 +2,6 @@
 
 import json
 import random
-import uuid
 from datetime import date, datetime, timedelta, timezone
 
 import numpy as np
@@ -31,16 +30,6 @@ def reset_id_counter(start: int = 10000) -> None:
     """Reset the ID counter (useful between generator runs)."""
     global _id_counter
     _id_counter = start
-
-
-def generate_uuid() -> str:
-    """Generate a UUID string for _airbyte_raw_id."""
-    return str(uuid.uuid4())
-
-
-def airbyte_meta() -> dict:
-    """Return the standard Airbyte meta column value."""
-    return {"changes": []}
 
 
 def now_utc() -> datetime:

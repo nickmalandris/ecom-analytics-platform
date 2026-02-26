@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: analytics_user
+          POSTGRES_PASSWORD: analytics_pass
+          POSTGRES_DB: analytics
+        ports:
+          - 5435:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        enable-cache: true
+        cache-dependency-glob: "uv.lock"
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.13"
+    
+    - name: Install dependencies
+      run: uv sync --all-extras --dev
+    
+    - name: Seed test data
+      env:
+        DATABASE_URL: postgresql://analytics_user:analytics_pass@localhost:5435/analytics
+      run: uv run python -m scripts.seed --clean
+      
+    - name: Run model builder
+      env:
+        DATABASE_URL: postgresql://analytics_user:analytics_pass@localhost:5435/analytics
+      run: uv run python -m src.data.model_runner --tenant-id 1
+      
+    - name: Run tests
+      env:
+        DATABASE_URL: postgresql://analytics_user:analytics_pass@localhost:5435/analytics
+      run: uv run pytest
+
+  test-frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: './frontend/package-lock.json'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Run ESLint
+      run: npm run lint
+      
+    - name: Run Type Check
+      run: npx tsc --noEmit
+      
+    - name: Build
+      run: npm run build

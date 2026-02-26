@@ -464,30 +464,42 @@ CREATE TABLE IF NOT EXISTS {schema}.ads_insights (
 
 def create_tenant_schema_and_tables(conn, tenant_id: int):
     """
-    Fully initialize a new tenant's database schema.
-    Creates the schema and all required tables for Shopify and Meta data.
+    Fully initialize a new tenant's database schema using Alembic.
     """
     schema = f"tenant_{tenant_id}"
     
-    # List of table DDLs to execute
-    ddl_statements = [
-        ("products", SHOPIFY_PRODUCTS_DDL),
-        ("product_variants", SHOPIFY_PRODUCT_VARIANTS_DDL),
-        ("customers", SHOPIFY_CUSTOMERS_DDL),
-        ("orders", SHOPIFY_ORDERS_DDL),
-        ("order_refunds", SHOPIFY_ORDER_REFUNDS_DDL),
-        ("campaigns", META_CAMPAIGNS_DDL),
-        ("ad_sets", META_AD_SETS_DDL),
-        ("ads", META_ADS_DDL),
-        ("ads_insights", META_ADS_INSIGHTS_DDL),
-    ]
-
     with conn.cursor() as cur:
         # Create Schema
         cur.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
-        
-        # Create Tables
-        for table_name, ddl in ddl_statements:
-            cur.execute(ddl.format(schema=schema))
-            
     conn.commit()
+
+    # Run Alembic migrations for this specific schema
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    project_root = Path(__file__).resolve().parent.parent.parent
+    
+    try:
+        subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "alembic",
+                "-c",
+                "alembic.ini",
+                "-n",
+                "alembic_tenants",
+                "-x",
+                f"tenant_schema={schema}",
+                "upgrade",
+                "head",
+            ],
+            cwd=project_root,
+            check=True,
+            capture_output=True,
+        )
+    except subprocess.CalledProcessError as e:
+        print(f"Alembic migration failed for tenant {tenant_id}:")
+        print(e.stderr.decode())
+        raise

@@ -11,7 +11,7 @@ from urllib.parse import urlencode
 
 import httpx
 import psycopg2
-from fastapi import APIRouter, HTTPException, Request, Depends
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Depends
 from fastapi.responses import RedirectResponse, JSONResponse
 
 from src.config import settings
@@ -58,7 +58,7 @@ def initiate_shopify_auth(tenant_id: int, shop: str, conn=Depends(get_db_conn)):
 
 
 @router.get("/shopify/callback")
-async def shopify_auth_callback(request: Request):
+async def shopify_auth_callback(request: Request, background_tasks: BackgroundTasks):
     """
     Handle Shopify OAuth callback.
     Exchanges code for permanent access token.
@@ -124,8 +124,21 @@ async def shopify_auth_callback(request: Request):
     finally:
         conn.close()
 
-    # Redirect to UI with success status
-    redirect_url = f"{settings.app_base_url}/onboarding?status=shopify_success&tenant_id={tenant_id}"
+    # Ensure tenant schema has all required tables
+    conn2 = psycopg2.connect(settings.database_url)
+    try:
+        from src.ingestion.db_utils import create_tenant_schema_and_tables
+        create_tenant_schema_and_tables(conn2, tenant_id)
+    finally:
+        conn2.close()
+
+    # Trigger initial data sync in background
+    from src.ingestion.shopify_sync import full_sync
+    logger.info("Triggering initial Shopify sync for tenant %s", tenant_id)
+    background_tasks.add_task(full_sync, tenant_id)
+
+    # Redirect to frontend dashboard
+    redirect_url = f"{settings.app_base_url}/connectors?status=shopify_success"
     return RedirectResponse(redirect_url)
 
 

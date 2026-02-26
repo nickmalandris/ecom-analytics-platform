@@ -10,12 +10,9 @@ Key transformations:
   - camelCase → snake_case for column names
   - Connection edges → flat JSONB arrays (lineItems, variants, etc.)
   - MoneyV2 / MoneyBag → our money_set JSONB format
-  - Add Airbyte system columns (_airbyte_raw_id, _airbyte_extracted_at, _airbyte_meta)
 """
 
 import re
-import uuid
-from datetime import datetime, timezone
 from typing import Any
 
 # ─── Utility helpers ─────────────────────────────────────
@@ -70,15 +67,6 @@ def _money_amount(money_bag: dict | None) -> str | None:
         return None
     shop = money_bag.get("shopMoney")
     return shop.get("amount") if shop else None
-
-
-def _airbyte_columns() -> dict:
-    """Generate standard Airbyte system columns."""
-    return {
-        "_airbyte_raw_id": str(uuid.uuid4()),
-        "_airbyte_extracted_at": datetime.now(timezone.utc).isoformat(),
-        "_airbyte_meta": {"changes": []},
-    }
 
 
 def _edges_to_list(connection: dict | None) -> list[dict]:
@@ -160,7 +148,6 @@ def transform_product(product: dict, shop_url: str) -> tuple[dict, list[dict]]:
             "created_at": v.get("createdAt"),
             "updated_at": v.get("updatedAt"),
             "shop_url": shop_url,
-            **_airbyte_columns(),
         }
         variant_rows.append(variant_row)
 
@@ -247,7 +234,6 @@ def transform_product(product: dict, shop_url: str) -> tuple[dict, list[dict]]:
         "images": images_jsonb,
         "total_inventory": product.get("totalInventory"),
         "total_variants": len(raw_variants),  # totalVariants removed in 2026-01, compute from variants list
-        **_airbyte_columns(),
     }
 
     return product_row, variant_rows
@@ -359,7 +345,6 @@ def transform_customer(customer: dict, shop_url: str) -> dict:
         "addresses": addresses_jsonb,
         "email_marketing_consent": email_marketing_consent,
         "sms_marketing_consent": sms_marketing_consent,
-        **_airbyte_columns(),
     }
 
 
@@ -551,7 +536,6 @@ def transform_order(order: dict, shop_url: str) -> tuple[dict, list[dict]]:
         "fulfillments": [],
         "refunds": refunds_jsonb,
         "shop_url": shop_url,
-        **_airbyte_columns(),
     }
 
     return order_row, refund_rows
@@ -663,7 +647,6 @@ def _transform_refund(
         "order_adjustments": [],
         "refund_line_items": refund_line_items,
         "transactions": transactions,
-        **_airbyte_columns(),
     }
 
     # Embedded version for the order's refunds JSONB array

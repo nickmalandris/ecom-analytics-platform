@@ -334,10 +334,18 @@ def full_sync(tenant_id: int, db_url: str | None = None) -> dict:
 
         elapsed = (datetime.now(timezone.utc) - sync_start).total_seconds()
         summary["elapsed_seconds"] = round(elapsed, 1)
-        return summary
 
     finally:
         conn.close()
+
+    # Refresh staging + mart materialized views so dashboard is up to date
+    try:
+        from src.data.model_runner import refresh_models
+        refresh_models(tenant_id, db_url)
+    except Exception as e:
+        logger.error("Model refresh failed after full sync: %s", e)
+
+    return summary
 
 
 # ─── Incremental Sync (Paginated Queries) ───────────────
@@ -441,10 +449,18 @@ def incremental_sync(tenant_id: int, db_url: str | None = None) -> dict:
 
         elapsed = (datetime.now(timezone.utc) - sync_start).total_seconds()
         summary["elapsed_seconds"] = round(elapsed, 1)
-        return summary
 
     finally:
         conn.close()
+
+    # Refresh staging + mart materialized views so dashboard is up to date
+    try:
+        from src.data.model_runner import refresh_models
+        refresh_models(tenant_id, db_url)
+    except Exception as e:
+        logger.error("Model refresh failed after incremental sync: %s", e)
+
+    return summary
 
 
 # ─── CLI ─────────────────────────────────────────────────

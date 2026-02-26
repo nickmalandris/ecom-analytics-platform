@@ -1,7 +1,8 @@
-"""Generate Shopify seed data matching Airbyte's output schema."""
+"""Generate Shopify seed data."""
 
 import json
 import random
+import uuid
 from datetime import date, datetime, timedelta, timezone
 
 from scripts.generators.helpers import (
@@ -9,8 +10,6 @@ from scripts.generators.helpers import (
     daily_volume_curve_aligned,
     fake,
     fake_australian_address,
-    generate_uuid,
-    airbyte_meta,
     jitter,
     money_set,
     next_id,
@@ -162,9 +161,6 @@ def generate_products(start_date: date) -> tuple[list[dict], list[dict]]:
                 "created_at": to_iso(created_at),
                 "updated_at": to_iso(created_at + timedelta(days=random.randint(0, 30))),
                 "shop_url": SHOP_URL,
-                "_airbyte_raw_id": generate_uuid(),
-                "_airbyte_extracted_at": to_iso(datetime.now(timezone.utc)),
-                "_airbyte_meta": airbyte_meta(),
             }
             variants.append(variant_row)
             product_variants.append(variant_row)
@@ -216,9 +212,6 @@ def generate_products(start_date: date) -> tuple[list[dict], list[dict]]:
             "images": [],
             "total_inventory": sum(v["inventory_quantity"] for v in product_variants),
             "total_variants": len(product_variants),
-            "_airbyte_raw_id": generate_uuid(),
-            "_airbyte_extracted_at": to_iso(datetime.now(timezone.utc)),
-            "_airbyte_meta": airbyte_meta(),
             # Metadata for generation (not stored in DB)
             "_meta_hero": catalog_item["hero"],
             "_meta_problem": catalog_item["problem"],
@@ -276,9 +269,6 @@ def generate_customers(num_customers: int, start_date: date) -> list[dict]:
                 "consent_updated_at": to_iso(created_at),
             },
             "sms_marketing_consent": None,
-            "_airbyte_raw_id": generate_uuid(),
-            "_airbyte_extracted_at": to_iso(datetime.now(timezone.utc)),
-            "_airbyte_meta": airbyte_meta(),
         })
 
     return customers
@@ -490,9 +480,9 @@ def generate_orders(
                 "buyer_accepts_marketing": customer["accepts_marketing"],
                 "cancel_reason": None,
                 "cancelled_at": None,
-                "cart_token": generate_uuid(),
+                "cart_token": str(uuid.uuid4()),
                 "checkout_id": next_id(),
-                "checkout_token": generate_uuid(),
+                "checkout_token": str(uuid.uuid4()),
                 "closed_at": to_iso(order_dt + timedelta(days=random.randint(1, 7))) if fulfillment_status == "fulfilled" else None,
                 "confirmed": True,
                 "confirmation_number": f"C{order_number}",
@@ -540,7 +530,7 @@ def generate_orders(
                 ],
                 "taxes_included": False,
                 "test": False,
-                "token": generate_uuid(),
+                "token": str(uuid.uuid4()),
                 "total_discounts": str(round_money(discount_amount)),
                 "total_discounts_set": money_set(round_money(discount_amount)),
                 "total_line_items_price": str(round_money(subtotal)),
@@ -572,9 +562,6 @@ def generate_orders(
                 "fulfillments": [],
                 "refunds": [],
                 "shop_url": SHOP_URL,
-                "_airbyte_raw_id": generate_uuid(),
-                "_airbyte_extracted_at": to_iso(datetime.now(timezone.utc)),
-                "_airbyte_meta": airbyte_meta(),
                 # Internal metadata (not stored)
                 "_meta_line_items_raw": line_items,
             }
@@ -688,9 +675,6 @@ def generate_orders(
                         "test": False,
                     }
                 ],
-                "_airbyte_raw_id": generate_uuid(),
-                "_airbyte_extracted_at": to_iso(datetime.now(timezone.utc)),
-                "_airbyte_meta": airbyte_meta(),
             }
             refunds.append(refund_row)
 

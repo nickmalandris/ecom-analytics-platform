@@ -6,6 +6,7 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import Connectors from './pages/Connectors'
+import Chat from './pages/Chat'
 import './index.css'
 
 const router = createBrowserRouter([
@@ -16,6 +17,10 @@ const router = createBrowserRouter([
   {
     path: "/connectors",
     element: <Connectors />,
+  },
+  {
+    path: "/chat",
+    element: <Chat />,
   },
   {
     path: "/login",

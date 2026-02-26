@@ -1,31 +1,99 @@
 """
 FastAPI router for user authentication endpoints.
+Includes email/password auth and Google/Facebook OAuth via fastapi-users.
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request, Response
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import RedirectResponse
 
 from src.auth.manager import auth_backend, fastapi_users
+from src.auth.oauth import google_oauth_client, facebook_oauth_client
 from src.auth.schemas import UserCreate, UserRead, UserUpdate
+from src.config import settings
 
 router = APIRouter()
 
-# Authentication routes (login/logout)
+# ─── Email/Password Auth ─────────────────────────────────
+
 router.include_router(
     fastapi_users.get_auth_router(auth_backend),
     prefix="/auth/jwt",
     tags=["auth"],
 )
 
-# Registration routes
 router.include_router(
     fastapi_users.get_register_router(UserRead, UserCreate),
     prefix="/auth",
     tags=["auth"],
 )
 
-# User management routes (get current user, update user)
 router.include_router(
     fastapi_users.get_users_router(UserRead, UserUpdate),
     prefix="/users",
     tags=["users"],
 )
+
+# ─── Google OAuth ─────────────────────────────────────────
+
+router.include_router(
+    fastapi_users.get_oauth_router(
+        google_oauth_client,
+        auth_backend,
+        state_secret=settings.encryption_key,
+        redirect_url=f"{settings.app_base_url}/auth/google/callback",
+        associate_by_email=True,
+        is_verified_by_default=True,
+        csrf_token_cookie_secure=False,
+    ),
+    prefix="/auth/google",
+    tags=["auth"],
+)
+
+# ─── Facebook OAuth ──────────────────────────────────────
+
+router.include_router(
+    fastapi_users.get_oauth_router(
+        facebook_oauth_client,
+        auth_backend,
+        state_secret=settings.encryption_key,
+        redirect_url=f"{settings.app_base_url}/auth/facebook/callback",
+        associate_by_email=True,
+        is_verified_by_default=True,
+        csrf_token_cookie_secure=False,
+    ),
+    prefix="/auth/facebook",
+    tags=["auth"],
+)
+
+
+# ─── OAuth Callback Redirect Middleware ──────────────────
+# fastapi-users' CookieTransport returns 204 on the OAuth callback.
+# Since this is a browser redirect from Google/Facebook, we need to
+# redirect the user to the frontend after the auth cookie is set.
+
+class OAuthCallbackRedirectMiddleware(BaseHTTPMiddleware):
+    """After OAuth callback sets the auth cookie (204), redirect to frontend."""
+
+    OAUTH_CALLBACK_PATHS = {"/auth/google/callback", "/auth/facebook/callback"}
+
+    async def dispatch(self, request: Request, call_next):
+        try:
+            response: Response = await call_next(request)
+
+            if request.url.path in self.OAUTH_CALLBACK_PATHS and response.status_code == 204:
+                # Build redirect response preserving the Set-Cookie headers
+                redirect = RedirectResponse(url=settings.frontend_url, status_code=302)
+                # Copy cookies from the original response (using raw headers since MutableHeaders lacks multi_items)
+                for key, value in response.headers.raw:
+                    if key.lower() == b"set-cookie":
+                        redirect.headers.append("set-cookie", value.decode("latin-1"))
+                return redirect
+
+            return response
+        except Exception as e:
+            import traceback
+            err_msg = traceback.format_exc()
+            print(f"OAUTH MIDDLEWARE CAUGHT ERROR:\\n{err_msg}")
+            from fastapi.responses import JSONResponse
+            return JSONResponse(status_code=500, content={"error": "Internal Server Error", "detail": str(e), "traceback": err_msg})
