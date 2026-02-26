@@ -44,16 +44,19 @@ jobs:
     - name: Seed test data
       env:
         DATABASE_URL: postgresql://analytics_user:analytics_pass@localhost:5435/analytics
+        OPENAI_API_KEY: dummy-key-for-tests
       run: uv run python -m scripts.seed --clean
       
     - name: Run model builder
       env:
         DATABASE_URL: postgresql://analytics_user:analytics_pass@localhost:5435/analytics
+        OPENAI_API_KEY: dummy-key-for-tests
       run: uv run python -m src.data.model_runner --tenant-id 1
       
     - name: Run tests
       env:
         DATABASE_URL: postgresql://analytics_user:analytics_pass@localhost:5435/analytics
+        OPENAI_API_KEY: dummy-key-for-tests
       run: uv run pytest
 
   test-frontend:
