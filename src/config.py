@@ -35,11 +35,15 @@ class Settings(BaseSettings):
     google_client_id: str = ""
     google_client_secret: str = ""
 
-    # Meta Marketing API (also used for Facebook social login)
+    # Meta / Facebook social login
     meta_app_id: str = ""
     meta_app_secret: str = ""
     meta_short_lived_token: str = ""
     meta_ad_account_id: str = ""
+
+    # Meta Marketing API connector (separate app with Marketing API product)
+    meta_connector_app_id: str = ""
+    meta_connector_app_secret: str = ""
 
     # Email
     smtp_host: str = "smtp.gmail.com"

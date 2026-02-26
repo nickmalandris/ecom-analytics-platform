@@ -83,8 +83,9 @@ class MetaClient:
     ):
         self.tenant_id = tenant_id
         self.conn = conn
-        self._app_id = app_id or os.getenv("META_APP_ID", "").strip()
-        self._app_secret = app_secret or os.getenv("META_APP_SECRET", "").strip()
+        # Prefer connector app credentials (Marketing API) over social login app
+        self._app_id = app_id or os.getenv("META_CONNECTOR_APP_ID", "").strip() or os.getenv("META_APP_ID", "").strip()
+        self._app_secret = app_secret or os.getenv("META_CONNECTOR_APP_SECRET", "").strip() or os.getenv("META_APP_SECRET", "").strip()
 
         # Token state
         self._token: str | None = None

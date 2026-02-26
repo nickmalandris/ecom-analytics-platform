@@ -146,9 +146,9 @@ async def shopify_auth_callback(request: Request, background_tasks: BackgroundTa
 
 @router.get("/meta/initiate/{tenant_id}")
 def initiate_meta_auth(tenant_id: int, conn=Depends(get_db_conn)):
-    """Start Meta OAuth flow."""
-    if not settings.meta_app_id:
-        raise HTTPException(status_code=500, detail="Meta App ID not configured")
+    """Start Meta OAuth flow (uses dedicated connector app with Marketing API)."""
+    if not settings.meta_connector_app_id:
+        raise HTTPException(status_code=500, detail="Meta Connector App ID not configured")
 
     # Verify tenant
     with conn.cursor() as cur:
@@ -156,34 +156,35 @@ def initiate_meta_auth(tenant_id: int, conn=Depends(get_db_conn)):
         if not cur.fetchone():
             raise HTTPException(status_code=404, detail="Tenant not found")
 
-    redirect_uri = f"{settings.app_base_url}/api/auth/meta/callback"
-    scope = "ads_read,read_insights,business_management"
+    redirect_uri = f"{settings.app_base_url}/api/auth/meta/connector/callback"
+    scope = "ads_management"
     state = str(tenant_id)
 
     auth_url = (
-        f"https://www.facebook.com/v18.0/dialog/oauth?"
-        f"client_id={settings.meta_app_id}&redirect_uri={redirect_uri}&state={state}&scope={scope}"
+        f"https://www.facebook.com/v25.0/dialog/oauth?"
+        f"client_id={settings.meta_connector_app_id}&redirect_uri={redirect_uri}&state={state}&scope={scope}"
     )
     
     return RedirectResponse(auth_url)
 
 
-@router.get("/meta/callback")
-async def meta_auth_callback(code: str, state: str):
+@router.get("/meta/connector/callback")
+async def meta_connector_callback(code: str, state: str, background_tasks: BackgroundTasks):
     """
-    Handle Meta OAuth callback.
+    Handle Meta Marketing API connector OAuth callback.
     Exchanges code -> short-lived token -> long-lived token.
+    Discovers ad account ID, stores credentials, and triggers initial sync.
     """
     tenant_id = int(state)
-    redirect_uri = f"{settings.app_base_url}/api/auth/meta/callback"
+    redirect_uri = f"{settings.app_base_url}/api/auth/meta/connector/callback"
 
     async with httpx.AsyncClient() as client:
         # 1. Exchange code for short-lived token
-        token_url = "https://graph.facebook.com/v18.0/oauth/access_token"
+        token_url = "https://graph.facebook.com/v25.0/oauth/access_token"
         resp = await client.get(token_url, params={
-            "client_id": settings.meta_app_id,
+            "client_id": settings.meta_connector_app_id,
             "redirect_uri": redirect_uri,
-            "client_secret": settings.meta_app_secret,
+            "client_secret": settings.meta_connector_app_secret,
             "code": code
         })
 
@@ -195,11 +196,11 @@ async def meta_auth_callback(code: str, state: str):
         short_token = data.get("access_token")
 
         # 2. Exchange short-lived for long-lived token
-        exchange_url = "https://graph.facebook.com/v18.0/oauth/access_token"
+        exchange_url = "https://graph.facebook.com/v25.0/oauth/access_token"
         resp = await client.get(exchange_url, params={
             "grant_type": "fb_exchange_token",
-            "client_id": settings.meta_app_id,
-            "client_secret": settings.meta_app_secret,
+            "client_id": settings.meta_connector_app_id,
+            "client_secret": settings.meta_connector_app_secret,
             "fb_exchange_token": short_token
         })
 
@@ -209,9 +210,32 @@ async def meta_auth_callback(code: str, state: str):
 
         data = resp.json()
         long_token = data.get("access_token")
-        expires_in = data.get("expires_in", 5184000) # Default ~60 days
+        expires_in = data.get("expires_in", 5184000)  # Default ~60 days
 
-    # Store encrypted token
+        # 3. Discover the user's ad account ID
+        resp = await client.get(
+            "https://graph.facebook.com/v25.0/me/adaccounts",
+            params={"access_token": long_token, "fields": "id,name,account_status", "limit": 100},
+        )
+
+        ad_account_id = None
+        if resp.status_code == 200:
+            accounts = resp.json().get("data", [])
+            if accounts:
+                # Prefer an active account (account_status=1), fall back to first
+                active = [a for a in accounts if a.get("account_status") == 1]
+                chosen = active[0] if active else accounts[0]
+                ad_account_id = chosen["id"]  # already in "act_123" format
+                logger.info(
+                    "Discovered %d ad account(s) for tenant %s, using %s (%s)",
+                    len(accounts), tenant_id, ad_account_id, chosen.get("name"),
+                )
+            else:
+                logger.warning("No ad accounts found for tenant %s", tenant_id)
+        else:
+            logger.error(f"Failed to fetch ad accounts: {resp.text}")
+
+    # Store encrypted token + ad account ID
     encrypted = encrypt_token(long_token)
     expires_at = datetime.now() + timedelta(seconds=expires_in)
 
@@ -223,15 +247,30 @@ async def meta_auth_callback(code: str, state: str):
                 UPDATE public.tenants 
                 SET meta_access_token = %s,
                     meta_token_expires_at = %s,
+                    meta_account_id = %s,
                     updated_at = NOW()
                 WHERE id = %s
                 """,
-                (encrypted, expires_at, tenant_id)
+                (encrypted, expires_at, ad_account_id, tenant_id)
             )
         conn.commit()
     finally:
         conn.close()
 
-    # Redirect to UI with success status
-    redirect_url = f"{settings.app_base_url}/onboarding?status=meta_success&tenant_id={tenant_id}"
+    # Ensure tenant schema has all required tables
+    conn2 = psycopg2.connect(settings.database_url)
+    try:
+        from src.ingestion.db_utils import create_tenant_schema_and_tables
+        create_tenant_schema_and_tables(conn2, tenant_id)
+    finally:
+        conn2.close()
+
+    # Trigger initial Meta data sync in background
+    if ad_account_id:
+        from src.ingestion.meta_sync import full_sync
+        logger.info("Triggering initial Meta sync for tenant %s", tenant_id)
+        background_tasks.add_task(full_sync, tenant_id)
+
+    # Redirect to frontend connectors page
+    redirect_url = f"{settings.app_base_url}/connectors?status=meta_success"
     return RedirectResponse(redirect_url)
