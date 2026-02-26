@@ -19,8 +19,13 @@ interface SyncStatus {
 
 type ConnectState = 'idle' | 'connecting' | 'syncing' | 'done' | 'error';
 
+interface UserData {
+  email: string;
+  [key: string]: unknown;
+}
+
 export default function Connectors() {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<UserData | null>(null);
   const [status, setStatus] = useState<ConnectionStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [connectState, setConnectState] = useState<ConnectState>('idle');
@@ -107,9 +112,13 @@ export default function Connectors() {
         // Need to redirect to Shopify OAuth
         window.location.href = response.data.redirect_url;
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       setConnectState('error');
-      setErrorMsg(err.response?.data?.detail || 'Failed to connect. Please try again.');
+      if (axios.isAxiosError(err)) {
+        setErrorMsg(err.response?.data?.detail || 'Failed to connect. Please try again.');
+      } else {
+        setErrorMsg('Failed to connect. Please try again.');
+      }
     }
   };
 

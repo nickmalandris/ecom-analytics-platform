@@ -24,11 +24,15 @@ export default function Register() {
         is_verified: false,
       });
       navigate('/login');
-    } catch (err: any) {
-      if (err.response?.data?.detail === 'REGISTER_USER_ALREADY_EXISTS') {
-        setError('An account with this email already exists.');
-      } else if (err.response?.data?.detail) {
-        setError(err.response.data.detail);
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err)) {
+        if (err.response?.data?.detail === 'REGISTER_USER_ALREADY_EXISTS') {
+          setError('An account with this email already exists.');
+        } else if (err.response?.data?.detail) {
+          setError(err.response.data.detail);
+        } else {
+          setError('Registration failed. Please try again.');
+        }
       } else {
         setError('Registration failed. Please try again.');
       }

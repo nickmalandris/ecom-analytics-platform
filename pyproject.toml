@@ -22,6 +22,8 @@ dependencies = [
     "slowapi>=0.1.9",
     "sentry-sdk[fastapi]>=2.0.0",
     "structlog>=24.1.0",
+    "fastapi-users[sqlalchemy,oauth]>=13.0.0",
+    "httpx-oauth>=0.14.0",
 ]
 
 [project.optional-dependencies]
@@ -32,8 +34,8 @@ dev = [
     "pytest-asyncio>=0.24.0",
 ]
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "faker>=30.0.0",
     "numpy>=1.26.0",
     "pytest>=8.0.0",

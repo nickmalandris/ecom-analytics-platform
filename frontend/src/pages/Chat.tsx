@@ -16,8 +16,13 @@ const SUGGESTIONS = [
   'Which customers are returning the most?',
 ];
 
+interface UserData {
+  email: string;
+  [key: string]: unknown;
+}
+
 export default function Chat() {
-  const [_user, setUser] = useState<any>(null);
+  const [_user, setUser] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -138,7 +143,7 @@ export default function Chat() {
           }
         }
       }
-    } catch (err) {
+    } catch {
       setMessages(prev => {
         const updated = [...prev];
         updated[updated.length - 1] = {

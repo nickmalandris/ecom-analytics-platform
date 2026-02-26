@@ -44,7 +44,6 @@ def mock_upsert():
 @pytest.fixture
 def mock_helpers():
     with patch("src.ingestion.meta_sync.ensure_sync_state_table"), \
-         patch("src.ingestion.meta_sync._get_tenant_meta_account_id", return_value="act_123"), \
          patch("src.ingestion.meta_sync.mark_sync_started"), \
          patch("src.ingestion.meta_sync.mark_sync_completed"):
         yield

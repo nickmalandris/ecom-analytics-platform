@@ -1,5 +1,5 @@
 // frontend/src/components/InsightsPanel.tsx
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 type Status = 'idle' | 'loading' | 'done' | 'error';
@@ -19,7 +19,7 @@ export default function InsightsPanel() {
   const ran = useRef(false);
   const navigate = useNavigate();
 
-  const fetchInsights = useCallback(async (force = false) => {
+  const fetchInsights = async (force = false) => {
     // 1. Check for valid cache unless forcing
     if (!force) {
       try {
@@ -105,7 +105,7 @@ export default function InsightsPanel() {
       setStatus('error');
       setErrorMsg('Failed to connect. Please try again.');
     }
-  }, []);
+  };
 
   useEffect(() => {
     // The ref is no longer needed with session caching, but we'll keep a similar
@@ -113,8 +113,13 @@ export default function InsightsPanel() {
     // caching logic decide whether to fetch.
     if (ran.current) return;
     ran.current = true;
-    fetchInsights(false); // Initial fetch can use cache
-  }, [fetchInsights]);
+    
+    // Defer the fetch slightly to avoid React Compiler warnings about synchronous setState in effect
+    setTimeout(() => {
+      fetchInsights(false);
+    }, 0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Parse text into insights and dig-deeper questions
   const parseContent = (raw: string) => {

@@ -19,7 +19,7 @@ interface KpiCardProps {
   target?: TargetInfo;
 }
 
-function progressPct(current: string, target: number, prefix: string): number {
+function progressPct(current: string, target: number): number {
   // Strip prefix and parse numeric value
   const raw = current.replace(/[$,%x]/g, '').replace(/,/g, '');
   const val = parseFloat(raw);
@@ -52,7 +52,7 @@ export default function KpiCard({
   const isPositive = hasChange && (invertChange ? changePct < 0 : changePct > 0);
   const isNegative = hasChange && (invertChange ? changePct > 0 : changePct < 0);
 
-  const pct = target ? progressPct(value, target.target_value, prefix) : null;
+  const pct = target ? progressPct(value, target.target_value) : null;
 
   return (
     <div className="group rounded-xl border border-gray-200/80 bg-white p-5 shadow-card transition-shadow hover:shadow-card-hover">

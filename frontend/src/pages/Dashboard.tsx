@@ -99,8 +99,13 @@ const CHART_TABS: { key: ChartTab; label: string; color: string; prefix: string 
   { key: 'roas', label: 'ROAS', color: '#3b82f6', prefix: '' },
 ];
 
+interface UserData {
+  email: string;
+  [key: string]: unknown;
+}
+
 export default function Dashboard() {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<Period>('30d');
   const [kpis, setKpis] = useState<KPIs | null>(null);
@@ -165,8 +170,8 @@ export default function Dashboard() {
         roas: roasRes.data.data,
       });
       setCampaigns(campRes.data);
-    } catch (err: any) {
-      if (err.response?.status === 400) {
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err) && err.response?.status === 400) {
         setError('Connect Shopify first to see analytics data.');
       } else {
         setError('Failed to load analytics data.');
