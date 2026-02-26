@@ -138,7 +138,7 @@ async def shopify_auth_callback(request: Request, background_tasks: BackgroundTa
     background_tasks.add_task(full_sync, tenant_id)
 
     # Redirect to frontend dashboard
-    redirect_url = f"{settings.app_base_url}/connectors?status=shopify_success"
+    redirect_url = f"{settings.frontend_url}/connectors?status=shopify_success"
     return RedirectResponse(redirect_url)
 
 
@@ -272,5 +272,5 @@ async def meta_connector_callback(code: str, state: str, background_tasks: Backg
         background_tasks.add_task(full_sync, tenant_id)
 
     # Redirect to frontend connectors page
-    redirect_url = f"{settings.app_base_url}/connectors?status=meta_success"
+    redirect_url = f"{settings.frontend_url}/connectors?status=meta_success"
     return RedirectResponse(redirect_url)
