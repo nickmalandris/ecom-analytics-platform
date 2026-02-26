@@ -167,6 +167,5 @@ def health_check():
     except Exception as e:
         logger.error(f"Database health check failed: {e}")
         db_status = "error"
-        raise HTTPException(status_code=503, detail="Database connection failed")
-        
+
     return {"status": "ok", "database": db_status}

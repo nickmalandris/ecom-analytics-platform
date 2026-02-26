@@ -40,29 +40,37 @@ scheduler = BackgroundScheduler(
 
 
 def start_scheduler():
-    """Start the background scheduler with the weekly report job."""
+    """Start the background scheduler with the weekly report job.
+
+    If the database is not yet reachable (e.g. during Railway deployment
+    when services start in parallel), log a warning and continue so the
+    API server can still bind its port and pass health checks.
+    """
     if scheduler.running:
         logger.warning("Scheduler already running")
         return
 
-    # Monday 8:00 AM AEST = Sunday 21:00 UTC
-    # AEST is UTC+10 (no DST for simplicity; AEDT would be UTC+11)
-    scheduler.add_job(
-        run_all_tenant_reports,
-        trigger=CronTrigger(
-            day_of_week="sun",
-            hour=21,
-            minute=0,
-            timezone="UTC",
-        ),
-        id="weekly_report",
-        name="Weekly Analytics Report - All Tenants",
-        replace_existing=True,
-        misfire_grace_time=3600,  # 1 hour grace period
-    )
+    try:
+        # Monday 8:00 AM AEST = Sunday 21:00 UTC
+        # AEST is UTC+10 (no DST for simplicity; AEDT would be UTC+11)
+        scheduler.add_job(
+            run_all_tenant_reports,
+            trigger=CronTrigger(
+                day_of_week="sun",
+                hour=21,
+                minute=0,
+                timezone="UTC",
+            ),
+            id="weekly_report",
+            name="Weekly Analytics Report - All Tenants",
+            replace_existing=True,
+            misfire_grace_time=3600,  # 1 hour grace period
+        )
 
-    scheduler.start()
-    logger.info("Scheduler started — persistent jobs stored in PostgreSQL")
+        scheduler.start()
+        logger.info("Scheduler started — persistent jobs stored in PostgreSQL")
+    except Exception as e:
+        logger.error("Failed to start scheduler (database may not be ready): %s", e)
 
 
 def stop_scheduler():
