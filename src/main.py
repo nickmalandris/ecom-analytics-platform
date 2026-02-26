@@ -68,17 +68,31 @@ structlog.configure(
 logger = structlog.get_logger(__name__)
 
 # Route standard logging to structlog
+import threading
+
 class StructlogHandler(logging.Handler):
+    """Forward stdlib log records to structlog with a recursion guard.
+
+    Because structlog is configured with stdlib LoggerFactory, calling
+    structlog's log methods re-enters stdlib logging.  The thread-local
+    ``_in_emit`` flag breaks the cycle.
+    """
+    _tls = threading.local()
+
     def emit(self, record):
-        logger_for_record = structlog.get_logger(record.name)
-        if record.exc_info:
-            logger_for_record.exception(record.getMessage(), exc_info=record.exc_info)
-        else:
-            # We map standard python log levels to structlog methods
-            # Only intercept log levels INFO and above to prevent overly noisy logs
-            if record.levelno >= logging.INFO:
+        # Prevent infinite recursion: structlog -> stdlib -> StructlogHandler -> structlog ...
+        if getattr(self._tls, "in_emit", False):
+            return
+        self._tls.in_emit = True
+        try:
+            logger_for_record = structlog.get_logger(record.name)
+            if record.exc_info:
+                logger_for_record.exception(record.getMessage(), exc_info=record.exc_info)
+            elif record.levelno >= logging.INFO:
                 method = getattr(logger_for_record, record.levelname.lower(), logger_for_record.info)
                 method(record.getMessage())
+        finally:
+            self._tls.in_emit = False
 
 root_logger = logging.getLogger()
 # Clear existing handlers again to be safe
