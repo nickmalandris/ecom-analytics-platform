@@ -439,6 +439,12 @@ def create_tenant(conn, tenant_id: int):
                 ["owner@teststore.com.au"],
             ),
         )
+        # Advance the sequence past any manually-inserted IDs so that
+        # future INSERTs without an explicit id don't collide.
+        cur.execute(
+            "SELECT setval(pg_get_serial_sequence('public.tenants', 'id'), "
+            "COALESCE((SELECT MAX(id) FROM public.tenants), 1))"
+        )
         print(f"  Created tenant: id={tenant_id}")
     conn.commit()
 
