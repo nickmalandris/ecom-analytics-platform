@@ -7,6 +7,10 @@ Requires: docker-compose up -d && uv run python -m scripts.seed --clean
 
 import os
 
+# Inject dummy keys before ANY other imports so pydantic-ai doesn't crash during pytest collection
+os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY", "dummy-key-for-tests")
+os.environ["ANTHROPIC_API_KEY"] = os.getenv("ANTHROPIC_API_KEY", "dummy-key-for-tests")
+
 import psycopg2
 import pytest
 from dotenv import load_dotenv

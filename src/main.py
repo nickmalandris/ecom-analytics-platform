@@ -75,12 +75,20 @@ class StructlogHandler(logging.Handler):
             logger_for_record.exception(record.getMessage(), exc_info=record.exc_info)
         else:
             # We map standard python log levels to structlog methods
-            method = getattr(logger_for_record, record.levelname.lower(), logger_for_record.info)
-            method(record.getMessage())
+            # Only intercept log levels INFO and above to prevent overly noisy logs
+            if record.levelno >= logging.INFO:
+                method = getattr(logger_for_record, record.levelname.lower(), logger_for_record.info)
+                method(record.getMessage())
 
 root_logger = logging.getLogger()
+# Clear existing handlers again to be safe
+root_logger.handlers.clear()
 root_logger.addHandler(StructlogHandler())
 root_logger.setLevel(logging.INFO)
+
+# Suppress noisy library loggers that cause loops or spam
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 # ── Lifespan ─────────────────────────────────────
 
