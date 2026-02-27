@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom';
 import { BarChart3 } from 'lucide-react';
+import { api } from '../lib/api';
 
 export default function Register() {
   const [email, setEmail] = useState('');
@@ -16,7 +17,7 @@ export default function Register() {
     setError('');
 
     try {
-      await axios.post('/auth/register', {
+      await api.post('/auth/register', {
         email,
         password,
         is_active: true,
@@ -43,7 +44,7 @@ export default function Register() {
     setSocialLoading(provider);
     setError('');
     try {
-      const res = await axios.get(`/auth/${provider}/authorize`);
+      const res = await api.get(`/auth/${provider}/authorize`);
       window.location.href = res.data.authorization_url;
     } catch {
       setError(`Failed to connect to ${provider === 'google' ? 'Google' : 'Facebook'}. Please try again.`);

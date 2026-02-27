@@ -31,6 +31,18 @@ uv run uvicorn src.main:app --reload --port 8000
 uv run pytest
 ```
 
+### Frontend (Vite React)
+
+```
+cd frontend
+npm install
+cp .env.example .env
+# Leave VITE_BACKEND_HOST empty for local dev (Vite proxy -> http://localhost:8000)
+# Set it to your deployed FastAPI URL in production, e.g. https://backend.up.railway.app
+VITE_BACKEND_HOST=https://your-backend.example.com
+npm run dev    # or npm run build && npm run preview
+```
+
 ---
 
 ## Commands
@@ -207,6 +219,7 @@ Copy `.env.example` to `.env` and configure:
 | `SMTP_USER` | For email | SMTP username |
 | `SMTP_PASSWORD` | For email | SMTP password |
 | `EMAIL_FROM` | For email | Sender email address |
+| `VITE_BACKEND_HOST` | Frontend deploy | Base URL that the Vite build should call for API requests. Leave blank locally to use the Vite proxy; set to your backend URL (e.g. `https://api.example.com`) in production. |
 
 ---
 

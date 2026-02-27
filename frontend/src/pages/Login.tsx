@@ -1,8 +1,8 @@
 // frontend/src/pages/Login.tsx
 import React, { useState } from 'react';
-import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom';
 import { BarChart3 } from 'lucide-react';
+import { api } from '../lib/api';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -20,7 +20,7 @@ export default function Login() {
     formData.append('password', password);
 
     try {
-      await axios.post('/auth/jwt/login', formData, {
+      await api.post('/auth/jwt/login', formData, {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       });
       navigate('/');
@@ -33,7 +33,7 @@ export default function Login() {
     setSocialLoading(provider);
     setError('');
     try {
-      const res = await axios.get(`/auth/${provider}/authorize`);
+      const res = await api.get(`/auth/${provider}/authorize`);
       window.location.href = res.data.authorization_url;
     } catch {
       setError(`Failed to connect to ${provider === 'google' ? 'Google' : 'Facebook'}. Please try again.`);

@@ -1,6 +1,6 @@
 // frontend/src/components/TargetsPanel.tsx
 import { useEffect, useState, useRef } from 'react';
-import axios from 'axios';
+import { api } from '@/lib/api';
 
 interface TargetComponent {
   trend_short: number;
@@ -80,7 +80,7 @@ export default function TargetsPanel() {
     const fetchTargets = async () => {
       setStatus('loading');
       try {
-        const res = await axios.get('/api/analytics/targets');
+        const res = await api.get('/api/analytics/targets');
         setTargets(res.data);
         setStatus('done');
       } catch {

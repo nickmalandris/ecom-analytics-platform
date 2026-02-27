@@ -125,7 +125,7 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const response = await axios.get('/users/me');
+        const response = await api.get('/users/me');
         setUser(response.data);
       } catch {
         navigate('/login');
@@ -141,7 +141,7 @@ export default function Dashboard() {
     if (!user) return;
     const fetchTargets = async () => {
       try {
-        const res = await axios.get('/api/analytics/targets');
+        const res = await api.get('/api/analytics/targets');
         setTargets(res.data);
       } catch {
         // Targets are optional — ignore errors
@@ -155,12 +155,12 @@ export default function Dashboard() {
     setError(null);
     try {
       const [kpiRes, revRes, ordRes, spendRes, roasRes, campRes] = await Promise.all([
-        axios.get(`/api/analytics/kpis?period=${p}`),
-        axios.get(`/api/analytics/timeseries?metric=revenue&period=${p}`),
-        axios.get(`/api/analytics/timeseries?metric=orders&period=${p}`),
-        axios.get(`/api/analytics/timeseries?metric=ad_spend&period=${p}`),
-        axios.get(`/api/analytics/timeseries?metric=roas&period=${p}`),
-        axios.get(`/api/analytics/campaigns?period=${p}`),
+        api.get(`/api/analytics/kpis?period=${p}`),
+        api.get(`/api/analytics/timeseries?metric=revenue&period=${p}`),
+        api.get(`/api/analytics/timeseries?metric=orders&period=${p}`),
+        api.get(`/api/analytics/timeseries?metric=ad_spend&period=${p}`),
+        api.get(`/api/analytics/timeseries?metric=roas&period=${p}`),
+        api.get(`/api/analytics/campaigns?period=${p}`),
       ]);
       setKpis(kpiRes.data);
       setTimeseries({
@@ -348,3 +348,4 @@ export default function Dashboard() {
     </Layout>
   );
 }
+import { api } from '../lib/api';

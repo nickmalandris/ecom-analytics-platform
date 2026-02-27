@@ -1,5 +1,4 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import {
   LayoutDashboard,
   MessageSquare,
@@ -8,6 +7,7 @@ import {
   BarChart3,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { api } from '@/lib/api';
 
 const NAV_ITEMS = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -21,7 +21,7 @@ export default function Sidebar({ email }: { email?: string }) {
 
   const handleLogout = async () => {
     try {
-      await axios.post('/auth/jwt/logout');
+      await api.post('/auth/jwt/logout');
       navigate('/login');
     } catch (err) {
       console.error('Logout failed', err);

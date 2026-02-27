@@ -1,8 +1,8 @@
 // frontend/src/pages/Chat.tsx
 import { useEffect, useState, useRef } from 'react';
-import axios from 'axios';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Layout from '../components/Layout';
+import { api, API_BASE_URL } from '../lib/api';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -36,7 +36,7 @@ export default function Chat() {
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const res = await axios.get('/users/me');
+        const res = await api.get('/users/me');
         setUser(res.data);
       } catch {
         navigate('/login');
@@ -75,7 +75,8 @@ export default function Chat() {
     setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
 
     try {
-      const response = await fetch('/api/chat', {
+      const base = API_BASE_URL || '';
+      const response = await fetch(base ? `${base}/api/chat` : '/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: text.trim() }),

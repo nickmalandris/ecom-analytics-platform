@@ -3,6 +3,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
+import { api } from '../lib/api';
 
 interface ConnectionStatus {
   shopify: { connected: boolean; store_url?: string };
@@ -39,8 +40,8 @@ export default function Connectors() {
     const fetchData = async () => {
       try {
         const [userRes, statusRes] = await Promise.all([
-          axios.get('/users/me'),
-          axios.get('/api/connections/status'),
+          api.get('/users/me'),
+          api.get('/api/connections/status'),
         ]);
         setUser(userRes.data);
         setStatus(statusRes.data);
@@ -60,7 +61,7 @@ export default function Connectors() {
     if (pollRef.current) return;
     pollRef.current = setInterval(async () => {
       try {
-        const res = await axios.get('/api/connections/sync-status');
+        const res = await api.get('/api/connections/sync-status');
         const data: SyncStatus = res.data;
         setSyncProgress(data);
 
@@ -70,7 +71,7 @@ export default function Connectors() {
           clearInterval(pollRef.current!);
           pollRef.current = null;
           // Refresh connection status
-          const statusRes = await axios.get('/api/connections/status');
+          const statusRes = await api.get('/api/connections/status');
           setStatus(statusRes.data);
         } else if (data.failed && !data.syncing) {
           setConnectState('error');
@@ -100,7 +101,7 @@ export default function Connectors() {
     setErrorMsg('');
 
     try {
-      const response = await axios.post('/api/connections/shopify/connect', {
+      const response = await api.post('/api/connections/shopify/connect', {
         shopify_store_url: shopUrl,
       });
 
