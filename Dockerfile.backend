@@ -18,6 +18,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install uv (astral-sh/uv)
 RUN pip install uv
 
+# Set UV cache directory to app directory (non-root user has write access)
+ENV UV_CACHE_DIR=/app/.cache/uv \
+    UV_LINK_MODE=copy
+
 # Copy uv dependency files
 COPY pyproject.toml uv.lock ./
 
@@ -36,6 +40,9 @@ COPY scripts/ ./scripts/
 RUN addgroup --system appgroup && adduser --system --group appgroup \
     && chown -R appgroup:appgroup /app
 USER appgroup
+
+# Create uv cache directory
+RUN mkdir -p /app/.cache/uv
 
 # Expose port
 EXPOSE 8000
