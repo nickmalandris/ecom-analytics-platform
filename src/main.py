@@ -132,9 +132,31 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # ty
 app.add_middleware(SlowAPIMiddleware)
 
 from src.config import settings
+
+
+def _normalized_origin(url: str | None) -> str | None:
+    if not url:
+        return None
+    return url.rstrip("/")
+
+
+frontend_origin = _normalized_origin(settings.frontend_url)
+additional_origins: set[str] = set()
+
+if frontend_origin:
+    additional_origins.add(frontend_origin)
+    if frontend_origin.startswith("http://"):
+        additional_origins.add(frontend_origin.replace("http://", "https://", 1))
+    elif frontend_origin.startswith("https://"):
+        additional_origins.add(frontend_origin.replace("https://", "http://", 1))
+
+# Allow localhost during development
+additional_origins.add("http://localhost:5173")
+additional_origins.add("http://127.0.0.1:5173")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_url],
+    allow_origins=[origin for origin in additional_origins if origin],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
