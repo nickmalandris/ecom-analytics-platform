@@ -4,7 +4,8 @@ FROM python:3.13-slim
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PORT=8000
+    PORT=8000 \
+    HOME=/app
 
 # Create and set working directory
 WORKDIR /app
@@ -16,7 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv (astral-sh/uv)
-RUN pip install uv
+RUN pip install --no-cache-dir uv
 
 # Set UV cache directory to app directory (non-root user has write access)
 ENV UV_CACHE_DIR=/app/.cache/uv \
