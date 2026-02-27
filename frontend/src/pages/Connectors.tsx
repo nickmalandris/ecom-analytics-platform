@@ -1,9 +1,8 @@
 // frontend/src/pages/Connectors.tsx
 import { useEffect, useState, useRef, useCallback } from 'react';
-import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
-import { api } from '../lib/api';
+import { api, isAxiosError } from '../lib/api';
 
 interface ConnectionStatus {
   shopify: { connected: boolean; store_url?: string };
@@ -46,7 +45,7 @@ export default function Connectors() {
         setUser(userRes.data);
         setStatus(statusRes.data);
       } catch (err) {
-        if (axios.isAxiosError(err) && err.response?.status === 401) {
+        if (isAxiosError(err) && err.response?.status === 401) {
           navigate('/login');
         }
       } finally {
@@ -115,7 +114,7 @@ export default function Connectors() {
       }
     } catch (err: unknown) {
       setConnectState('error');
-      if (axios.isAxiosError(err)) {
+      if (isAxiosError(err)) {
         setErrorMsg(err.response?.data?.detail || 'Failed to connect. Please try again.');
       } else {
         setErrorMsg('Failed to connect. Please try again.');

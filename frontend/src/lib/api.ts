@@ -13,3 +13,10 @@ export const api = axios.create({
 });
 
 export const isAxiosError = axios.isAxiosError;
+
+export const buildApiUrl = (path: string) => {
+  if (!path.startsWith('/')) {
+    return API_BASE_URL ? `${API_BASE_URL}/${path}` : path;
+  }
+  return API_BASE_URL ? `${API_BASE_URL}${path}` : path;
+};

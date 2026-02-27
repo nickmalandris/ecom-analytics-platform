@@ -1,9 +1,8 @@
 // frontend/src/pages/Register.tsx
 import React, { useState } from 'react';
-import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom';
 import { BarChart3 } from 'lucide-react';
-import { api } from '../lib/api';
+import { api, isAxiosError, buildApiUrl } from '../lib/api';
 
 export default function Register() {
   const [email, setEmail] = useState('');
@@ -26,7 +25,7 @@ export default function Register() {
       });
       navigate('/login');
     } catch (err: unknown) {
-      if (axios.isAxiosError(err)) {
+      if (isAxiosError(err)) {
         if (err.response?.data?.detail === 'REGISTER_USER_ALREADY_EXISTS') {
           setError('An account with this email already exists.');
         } else if (err.response?.data?.detail) {
@@ -40,16 +39,10 @@ export default function Register() {
     }
   };
 
-  const handleSocialLogin = async (provider: 'google' | 'facebook') => {
+  const handleSocialLogin = (provider: 'google' | 'facebook') => {
     setSocialLoading(provider);
     setError('');
-    try {
-      const res = await api.get(`/auth/${provider}/authorize`);
-      window.location.href = res.data.authorization_url;
-    } catch {
-      setError(`Failed to connect to ${provider === 'google' ? 'Google' : 'Facebook'}. Please try again.`);
-      setSocialLoading(null);
-    }
+    window.location.href = buildApiUrl(`/auth/${provider}/authorize`);
   };
 
   return (

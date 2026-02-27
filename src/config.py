@@ -1,6 +1,8 @@
 from typing import Literal
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import model_validator
+import logging
+import secrets
 
 
 class Settings(BaseSettings):
@@ -58,10 +60,18 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_production_settings(self):
         if self.environment == "production":
+            logger = logging.getLogger(__name__)
             if not self.encryption_key:
-                raise ValueError("ENCRYPTION_KEY is required in production environment.")
-            if not self.openai_api_key and not self.anthropic_api_key and not self.google_api_key:
-                raise ValueError("At least one LLM API key must be provided in production.")
+                self.encryption_key = secrets.token_urlsafe(32)
+                logger.warning(
+                    "ENCRYPTION_KEY is not set; generated ephemeral key. "
+                    "Set ENCRYPTION_KEY to a persistent value for stable auth tokens."
+                )
+            if not (self.openai_api_key or self.anthropic_api_key or self.google_api_key):
+                logger.warning(
+                    "No LLM API key configured; AI-powered reports will be disabled "
+                    "until OPENAI_API_KEY / ANTHROPIC_API_KEY / GOOGLE_API_KEY is set."
+                )
         return self
 
 

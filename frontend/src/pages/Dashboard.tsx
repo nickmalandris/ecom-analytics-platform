@@ -1,12 +1,12 @@
 // frontend/src/pages/Dashboard.tsx
 import { useEffect, useState, useCallback } from 'react';
-import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import KpiCard from '../components/KpiCard';
 import MetricChart from '../components/MetricChart';
 import CampaignTable from '../components/CampaignTable';
 import InsightsPanel from '../components/InsightsPanel';
+import { api, isAxiosError } from '../lib/api';
 
 type Period = '7d' | '14d' | '30d' | '90d';
 
@@ -170,11 +170,11 @@ export default function Dashboard() {
         roas: roasRes.data.data,
       });
       setCampaigns(campRes.data);
-    } catch (err: unknown) {
-      if (axios.isAxiosError(err) && err.response?.status === 400) {
-        setError('Connect Shopify first to see analytics data.');
-      } else {
-        setError('Failed to load analytics data.');
+      } catch (err: unknown) {
+        if (isAxiosError(err) && err.response?.status === 400) {
+          setError('Connect Shopify first to see analytics data.');
+        } else {
+          setError('Failed to load analytics data.');
       }
     } finally {
       setDataLoading(false);
@@ -348,4 +348,3 @@ export default function Dashboard() {
     </Layout>
   );
 }
-import { api } from '../lib/api';
