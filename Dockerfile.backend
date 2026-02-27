@@ -45,8 +45,11 @@ USER appgroup
 # Create uv cache directory
 RUN mkdir -p /app/.cache/uv
 
+# Copy start script
+COPY scripts/start.sh /app/start.sh
+
 # Expose port
 EXPOSE 8000
 
-# Start Uvicorn
-CMD uvicorn src.main:app --host 0.0.0.0 --port ${PORT:-8000}
+# Start Uvicorn via script (ensures $PORT is expanded)
+CMD ["/app/start.sh"]

@@ -446,7 +446,7 @@ async def get_insights(
     tenant_id = _require_tenant(user)
 
     async def generate():
-        from src.agent.agent import AgentDeps, analytics_agent
+        from src.agent.agent import AgentDeps, get_analytics_agent
 
         conn = _get_conn()
         try:
@@ -467,7 +467,7 @@ async def get_insights(
                 f"{today - timedelta(days=14)} to {today - timedelta(days=7)}."
             )
 
-            async with analytics_agent.run_stream(
+            async with get_analytics_agent().run_stream(
                 user_prompt,
                 deps=deps,
                 instructions=prompt,

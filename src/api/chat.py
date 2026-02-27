@@ -63,7 +63,7 @@ async def chat(
     tenant_id = user.tenant_id
 
     async def generate():
-        from src.agent.agent import AgentDeps, analytics_agent
+        from src.agent.agent import AgentDeps, get_analytics_agent
 
         conn = psycopg2.connect(settings.database_url)
         try:
@@ -77,7 +77,7 @@ async def chat(
 
             prompt = CHAT_SYSTEM_PROMPT.format(today=today.isoformat())
 
-            async with analytics_agent.run_stream(
+            async with get_analytics_agent().run_stream(
                 body.message,
                 deps=deps,
                 instructions=prompt,

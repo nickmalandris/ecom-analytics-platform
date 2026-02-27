@@ -47,157 +47,165 @@ def build_model_string() -> str:
 
 
 # ──────────────────────────────────────────────
-# Agent Definition
+# Agent Definition (lazy-initialized)
 # ──────────────────────────────────────────────
 
-analytics_agent = Agent(
-    model=build_model_string(),
-    deps_type=AgentDeps,
-    system_prompt=WEEKLY_REPORT_SYSTEM_PROMPT,
-    retries=2,
-)
+_analytics_agent: Agent | None = None
 
 
-# ──────────────────────────────────────────────
-# Tools
-# ──────────────────────────────────────────────
+def get_analytics_agent() -> Agent:
+    """Lazily create and return the analytics agent.
 
-@analytics_agent.tool
-def get_revenue_summary(ctx: RunContext[AgentDeps], start_date: str, end_date: str) -> dict:
-    """Get revenue metrics (gross revenue, net revenue, AOV, discounts, tax, shipping) for a date range.
-
-    Args:
-        start_date: Start date in YYYY-MM-DD format.
-        end_date: End date in YYYY-MM-DD format.
+    This avoids crashing at import time when OPENAI_API_KEY (or other
+    LLM provider keys) are not set in the environment.
     """
-    return queries.get_revenue_summary(
-        ctx.deps.conn,
-        ctx.deps.tenant_id,
-        date.fromisoformat(start_date),
-        date.fromisoformat(end_date),
+    global _analytics_agent
+    if _analytics_agent is not None:
+        return _analytics_agent
+
+    agent = Agent(
+        model=build_model_string(),
+        deps_type=AgentDeps,
+        system_prompt=WEEKLY_REPORT_SYSTEM_PROMPT,
+        retries=2,
     )
 
+    # ──────────────────────────────────────────────
+    # Tools
+    # ──────────────────────────────────────────────
 
-@analytics_agent.tool
-def get_orders_and_refunds(ctx: RunContext[AgentDeps], start_date: str, end_date: str) -> dict:
-    """Get order counts and refund metrics (refund amount, refund rate, items refunded) for a date range.
+    @agent.tool
+    def get_revenue_summary(ctx: RunContext[AgentDeps], start_date: str, end_date: str) -> dict:
+        """Get revenue metrics (gross revenue, net revenue, AOV, discounts, tax, shipping) for a date range.
 
-    Args:
-        start_date: Start date in YYYY-MM-DD format.
-        end_date: End date in YYYY-MM-DD format.
-    """
-    return queries.get_orders_and_refunds(
-        ctx.deps.conn,
-        ctx.deps.tenant_id,
-        date.fromisoformat(start_date),
-        date.fromisoformat(end_date),
-    )
+        Args:
+            start_date: Start date in YYYY-MM-DD format.
+            end_date: End date in YYYY-MM-DD format.
+        """
+        return queries.get_revenue_summary(
+            ctx.deps.conn,
+            ctx.deps.tenant_id,
+            date.fromisoformat(start_date),
+            date.fromisoformat(end_date),
+        )
 
+    @agent.tool
+    def get_orders_and_refunds(ctx: RunContext[AgentDeps], start_date: str, end_date: str) -> dict:
+        """Get order counts and refund metrics (refund amount, refund rate, items refunded) for a date range.
 
-@analytics_agent.tool
-def get_ad_performance(ctx: RunContext[AgentDeps], start_date: str, end_date: str) -> list[dict]:
-    """Get Meta Ads performance broken down by campaign. Returns spend, revenue, ROAS, CPA, CTR, and conversion rate for each campaign.
+        Args:
+            start_date: Start date in YYYY-MM-DD format.
+            end_date: End date in YYYY-MM-DD format.
+        """
+        return queries.get_orders_and_refunds(
+            ctx.deps.conn,
+            ctx.deps.tenant_id,
+            date.fromisoformat(start_date),
+            date.fromisoformat(end_date),
+        )
 
-    Args:
-        start_date: Start date in YYYY-MM-DD format.
-        end_date: End date in YYYY-MM-DD format.
-    """
-    return queries.get_ad_performance(
-        ctx.deps.conn,
-        ctx.deps.tenant_id,
-        date.fromisoformat(start_date),
-        date.fromisoformat(end_date),
-    )
+    @agent.tool
+    def get_ad_performance(ctx: RunContext[AgentDeps], start_date: str, end_date: str) -> list[dict]:
+        """Get Meta Ads performance broken down by campaign. Returns spend, revenue, ROAS, CPA, CTR, and conversion rate for each campaign.
 
+        Args:
+            start_date: Start date in YYYY-MM-DD format.
+            end_date: End date in YYYY-MM-DD format.
+        """
+        return queries.get_ad_performance(
+            ctx.deps.conn,
+            ctx.deps.tenant_id,
+            date.fromisoformat(start_date),
+            date.fromisoformat(end_date),
+        )
 
-@analytics_agent.tool
-def get_blended_metrics(ctx: RunContext[AgentDeps], start_date: str, end_date: str) -> dict:
-    """Get blended cross-platform metrics including blended ROAS, Meta ROAS, CAC, MER, and ad attribution percentage.
+    @agent.tool
+    def get_blended_metrics(ctx: RunContext[AgentDeps], start_date: str, end_date: str) -> dict:
+        """Get blended cross-platform metrics including blended ROAS, Meta ROAS, CAC, MER, and ad attribution percentage.
 
-    Args:
-        start_date: Start date in YYYY-MM-DD format.
-        end_date: End date in YYYY-MM-DD format.
-    """
-    return queries.get_blended_metrics(
-        ctx.deps.conn,
-        ctx.deps.tenant_id,
-        date.fromisoformat(start_date),
-        date.fromisoformat(end_date),
-    )
+        Args:
+            start_date: Start date in YYYY-MM-DD format.
+            end_date: End date in YYYY-MM-DD format.
+        """
+        return queries.get_blended_metrics(
+            ctx.deps.conn,
+            ctx.deps.tenant_id,
+            date.fromisoformat(start_date),
+            date.fromisoformat(end_date),
+        )
 
+    @agent.tool
+    def get_top_products(ctx: RunContext[AgentDeps], start_date: str, end_date: str, limit: int = 10) -> list[dict]:
+        """Get top-selling products ranked by revenue with refund rates.
 
-@analytics_agent.tool
-def get_top_products(ctx: RunContext[AgentDeps], start_date: str, end_date: str, limit: int = 10) -> list[dict]:
-    """Get top-selling products ranked by revenue with refund rates.
+        Args:
+            start_date: Start date in YYYY-MM-DD format.
+            end_date: End date in YYYY-MM-DD format.
+            limit: Number of products to return (default 10).
+        """
+        return queries.get_top_products(
+            ctx.deps.conn,
+            ctx.deps.tenant_id,
+            date.fromisoformat(start_date),
+            date.fromisoformat(end_date),
+            limit=limit,
+        )
 
-    Args:
-        start_date: Start date in YYYY-MM-DD format.
-        end_date: End date in YYYY-MM-DD format.
-        limit: Number of products to return (default 10).
-    """
-    return queries.get_top_products(
-        ctx.deps.conn,
-        ctx.deps.tenant_id,
-        date.fromisoformat(start_date),
-        date.fromisoformat(end_date),
-        limit=limit,
-    )
+    @agent.tool
+    def get_problem_products(ctx: RunContext[AgentDeps], start_date: str, end_date: str) -> list[dict]:
+        """Get products with unusually high refund rates (above 1.5x the portfolio average). Only includes products with sufficient order volume.
 
+        Args:
+            start_date: Start date in YYYY-MM-DD format.
+            end_date: End date in YYYY-MM-DD format.
+        """
+        return queries.get_problem_products(
+            ctx.deps.conn,
+            ctx.deps.tenant_id,
+            date.fromisoformat(start_date),
+            date.fromisoformat(end_date),
+        )
 
-@analytics_agent.tool
-def get_problem_products(ctx: RunContext[AgentDeps], start_date: str, end_date: str) -> list[dict]:
-    """Get products with unusually high refund rates (above 1.5x the portfolio average). Only includes products with sufficient order volume.
+    @agent.tool
+    def get_customer_metrics(ctx: RunContext[AgentDeps], start_date: str, end_date: str) -> dict:
+        """Get customer cohort metrics: new vs returning customer counts, revenue, and AOV comparison.
 
-    Args:
-        start_date: Start date in YYYY-MM-DD format.
-        end_date: End date in YYYY-MM-DD format.
-    """
-    return queries.get_problem_products(
-        ctx.deps.conn,
-        ctx.deps.tenant_id,
-        date.fromisoformat(start_date),
-        date.fromisoformat(end_date),
-    )
+        Args:
+            start_date: Start date in YYYY-MM-DD format.
+            end_date: End date in YYYY-MM-DD format.
+        """
+        return queries.get_customer_metrics(
+            ctx.deps.conn,
+            ctx.deps.tenant_id,
+            date.fromisoformat(start_date),
+            date.fromisoformat(end_date),
+        )
 
+    @agent.tool
+    def compare_periods(
+        ctx: RunContext[AgentDeps],
+        current_start: str, current_end: str,
+        previous_start: str, previous_end: str,
+    ) -> dict:
+        """Compare two time periods across all key metrics. Returns current values, previous values, and percentage changes for revenue, orders, AOV, ad spend, blended ROAS, refunds, and CAC.
 
-@analytics_agent.tool
-def get_customer_metrics(ctx: RunContext[AgentDeps], start_date: str, end_date: str) -> dict:
-    """Get customer cohort metrics: new vs returning customer counts, revenue, and AOV comparison.
+        Args:
+            current_start: Current period start date in YYYY-MM-DD format.
+            current_end: Current period end date in YYYY-MM-DD format.
+            previous_start: Previous period start date in YYYY-MM-DD format.
+            previous_end: Previous period end date in YYYY-MM-DD format.
+        """
+        return queries.compare_periods(
+            ctx.deps.conn,
+            ctx.deps.tenant_id,
+            date.fromisoformat(current_start),
+            date.fromisoformat(current_end),
+            date.fromisoformat(previous_start),
+            date.fromisoformat(previous_end),
+        )
 
-    Args:
-        start_date: Start date in YYYY-MM-DD format.
-        end_date: End date in YYYY-MM-DD format.
-    """
-    return queries.get_customer_metrics(
-        ctx.deps.conn,
-        ctx.deps.tenant_id,
-        date.fromisoformat(start_date),
-        date.fromisoformat(end_date),
-    )
-
-
-@analytics_agent.tool
-def compare_periods(
-    ctx: RunContext[AgentDeps],
-    current_start: str, current_end: str,
-    previous_start: str, previous_end: str,
-) -> dict:
-    """Compare two time periods across all key metrics. Returns current values, previous values, and percentage changes for revenue, orders, AOV, ad spend, blended ROAS, refunds, and CAC.
-
-    Args:
-        current_start: Current period start date in YYYY-MM-DD format.
-        current_end: Current period end date in YYYY-MM-DD format.
-        previous_start: Previous period start date in YYYY-MM-DD format.
-        previous_end: Previous period end date in YYYY-MM-DD format.
-    """
-    return queries.compare_periods(
-        ctx.deps.conn,
-        ctx.deps.tenant_id,
-        date.fromisoformat(current_start),
-        date.fromisoformat(current_end),
-        date.fromisoformat(previous_start),
-        date.fromisoformat(previous_end),
-    )
+    _analytics_agent = agent
+    return _analytics_agent
 
 
 # ──────────────────────────────────────────────
@@ -238,7 +246,7 @@ def generate_report(
             f"{report_start_date - timedelta(days=7)} to {report_start_date - timedelta(days=1)}."
         )
 
-        result = analytics_agent.run_sync(user_prompt, deps=deps)
+        result = get_analytics_agent().run_sync(user_prompt, deps=deps)
         return result.output
     finally:
         conn.close()

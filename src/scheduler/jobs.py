@@ -11,7 +11,6 @@ from datetime import date, timedelta
 import psycopg2
 from dotenv import load_dotenv
 
-from src.agent.agent import generate_report
 from src.data.model_runner import get_db_url as get_db_url_from_runner
 from src.email.sender import send_report_email_sync
 from src.reports.builder import build_weekly_report
@@ -99,6 +98,7 @@ def run_weekly_report(tenant_id: int = 1) -> str | None:
     logger.info("Generating report via LLM agent...")
     report_end = date.today() - timedelta(days=1)  # Yesterday
     try:
+        from src.agent.agent import generate_report
         report_text = generate_report(
             tenant_id=tenant_id,
             report_end_date=report_end,
