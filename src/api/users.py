@@ -3,7 +3,7 @@ FastAPI router for user authentication endpoints.
 Includes email/password auth and Google/Facebook OAuth via fastapi-users.
 """
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, Request, Response, HTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import RedirectResponse
 
@@ -11,6 +11,26 @@ from src.auth.manager import auth_backend, fastapi_users
 from src.auth.oauth import google_oauth_client, facebook_oauth_client
 from src.auth.schemas import UserCreate, UserRead, UserUpdate
 from src.config import settings
+
+from fastapi_users.router.oauth import (
+    CSRF_TOKEN_COOKIE_NAME,
+    CSRF_TOKEN_KEY,
+    generate_csrf_token,
+    generate_state_token,
+)
+
+def _oauth_redirect(url: str, csrf_token: str) -> RedirectResponse:
+    response = RedirectResponse(url=url, status_code=302)
+    response.set_cookie(
+        CSRF_TOKEN_COOKIE_NAME,
+        csrf_token,
+        max_age=3600,
+        path="/",
+        secure=settings.app_base_url.startswith("https://"),
+        httponly=True,
+        samesite="lax",
+    )
+    return response
 
 router = APIRouter()
 
@@ -65,6 +85,33 @@ router.include_router(
     prefix="/auth/facebook",
     tags=["auth"],
 )
+
+
+def _callback_url(provider: str) -> str:
+    return f"{settings.app_base_url}/auth/{provider}/callback"
+
+
+async def _browser_authorize(oauth_client, provider: str):
+    if not oauth_client.client_id or not oauth_client.client_secret:
+        raise HTTPException(status_code=400, detail=f"{provider.title()} OAuth not configured")
+
+    csrf_token = generate_csrf_token()
+    state = generate_state_token({CSRF_TOKEN_KEY: csrf_token}, settings.encryption_key)
+    authorization_url = await oauth_client.get_authorization_url(
+        _callback_url(provider),
+        state,
+    )
+    return _oauth_redirect(authorization_url, csrf_token)
+
+
+@router.get("/auth/google/browser", include_in_schema=False)
+async def google_browser_authorize():
+    return await _browser_authorize(google_oauth_client, "google")
+
+
+@router.get("/auth/facebook/browser", include_in_schema=False)
+async def facebook_browser_authorize():
+    return await _browser_authorize(facebook_oauth_client, "facebook")
 
 
 # ─── OAuth Callback Redirect Middleware ──────────────────

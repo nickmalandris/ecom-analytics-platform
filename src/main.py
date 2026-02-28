@@ -9,9 +9,10 @@ import logging
 import sys
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -21,6 +22,7 @@ from sqlalchemy import text
 
 import sentry_sdk
 import structlog
+from httpx import HTTPStatusError
 
 from src.api.analytics import router as analytics_router
 from src.api.auth_flow import router as auth_router
@@ -131,6 +133,21 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore
 app.add_middleware(SlowAPIMiddleware)
 
+
+@app.exception_handler(HTTPStatusError)
+async def httpx_error_handler(request: Request, exc: HTTPStatusError):
+    body = exc.response.text
+    logger.error(
+        "External HTTP request failed",
+        url=str(exc.request.url),
+        status_code=exc.response.status_code,
+        response_body=body,
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Upstream request failed", "upstream_status": exc.response.status_code},
+    )
+
 from src.config import settings
 
 
@@ -160,6 +177,12 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+logger.info(
+    "OAuth providers configured",
+    google=bool(settings.google_client_id and settings.google_client_secret),
+    facebook=bool(settings.meta_app_id and settings.meta_app_secret),
 )
 
 # OAuth callback redirect middleware (must be added before routers)

@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { BarChart3 } from 'lucide-react';
-import { api } from '../lib/api';
+import { api, API_BASE_URL } from '../lib/api';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -29,16 +29,12 @@ export default function Login() {
     }
   };
 
-  const handleSocialLogin = async (provider: 'google' | 'facebook') => {
+  const handleSocialLogin = (provider: 'google' | 'facebook') => {
     setSocialLoading(provider);
     setError('');
-    try {
-      const res = await api.get(`/auth/${provider}/authorize`);
-      window.location.href = res.data.authorization_url;
-    } catch {
-      setError(`Failed to connect to ${provider === 'google' ? 'Google' : 'Facebook'}. Please try again.`);
-      setSocialLoading(null);
-    }
+    const base = API_BASE_URL || '';
+    const path = `/auth/${provider}/browser`;
+    window.location.href = `${base}${path}`;
   };
 
   return (
