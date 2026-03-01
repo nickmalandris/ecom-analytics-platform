@@ -6,7 +6,7 @@ Includes email/password auth and Google/Facebook OAuth via fastapi-users.
 from fastapi import APIRouter, HTTPException
 from starlette.responses import RedirectResponse
 
-from src.auth.manager import auth_backend, fastapi_users
+from src.auth.manager import auth_backend, oauth_auth_backend, fastapi_users
 from src.auth.oauth import google_oauth_client, facebook_oauth_client
 from src.auth.schemas import UserCreate, UserRead, UserUpdate
 from src.config import settings
@@ -58,12 +58,12 @@ router.include_router(
 router.include_router(
     fastapi_users.get_oauth_router(
         google_oauth_client,
-        auth_backend,
+        oauth_auth_backend,
         state_secret=settings.encryption_key,
         redirect_url=f"{settings.app_base_url}/auth/google/callback",
         associate_by_email=True,
         is_verified_by_default=True,
-        csrf_token_cookie_secure=False,
+        csrf_token_cookie_secure=settings.environment == "production",
     ),
     prefix="/auth/google",
     tags=["auth"],
@@ -74,12 +74,12 @@ router.include_router(
 router.include_router(
     fastapi_users.get_oauth_router(
         facebook_oauth_client,
-        auth_backend,
+        oauth_auth_backend,
         state_secret=settings.encryption_key,
         redirect_url=f"{settings.app_base_url}/auth/facebook/callback",
         associate_by_email=True,
         is_verified_by_default=True,
-        csrf_token_cookie_secure=False,
+        csrf_token_cookie_secure=settings.environment == "production",
     ),
     prefix="/auth/facebook",
     tags=["auth"],
