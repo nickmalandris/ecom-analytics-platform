@@ -58,9 +58,15 @@ def ensure_base_tables() -> None:
         """,
     ]
 
-    with engine.connect() as conn:
-        for ddl in ddl_statements:
-            conn.execute(text(ddl))
-        conn.commit()
-
-    logger.info("Base tables verified (tenants, sync_state)")
+    try:
+        with engine.connect() as conn:
+            for ddl in ddl_statements:
+                conn.execute(text(ddl))
+            conn.commit()
+        logger.info("Base tables verified (tenants, sync_state)")
+    except Exception as exc:
+        logger.warning(
+            "Could not verify base tables at startup (DB may be temporarily "
+            "unreachable). Tables will be created on first use. Error: %s",
+            exc,
+        )
