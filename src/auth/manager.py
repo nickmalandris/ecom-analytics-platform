@@ -11,6 +11,7 @@ from starlette.responses import RedirectResponse
 from fastapi_users import BaseUserManager, FastAPIUsers, IntegerIDMixin
 from fastapi_users.authentication import (
     AuthenticationBackend,
+    BearerTransport,
     CookieTransport,
     JWTStrategy,
 )
@@ -46,9 +47,7 @@ async def get_user_manager(user_db: SQLAlchemyUserDatabase = Depends(get_user_db
 
 # ─── Authentication Backends ─────────────────────────────
 
-# Shared cookie settings for both backends so the cookie name, domain, and
-# security flags are identical.  The only difference is the *response* each
-# transport returns after a successful login.
+# Cookie settings for the OAuth redirect flow (browser top-level navigation).
 _cookie_kwargs = dict(
     cookie_name="analytics_auth",
     cookie_max_age=3600,
@@ -74,36 +73,37 @@ class RedirectCookieTransport(CookieTransport):
         return self._set_login_cookie(response, token)
 
 
-# 1) Standard cookie transport — returns 204 (for AJAX email/password login)
-cookie_transport = CookieTransport(**_cookie_kwargs)
+def get_jwt_strategy() -> JWTStrategy:
+    return JWTStrategy(secret=SECRET, lifetime_seconds=3600)
 
-# 2) Redirect cookie transport — returns 302 to frontend (for OAuth callback)
+
+# 1) Bearer transport — returns JSON {"access_token": "...", "token_type": "bearer"}
+#    Used for email/password login (AJAX). The frontend stores the token in
+#    localStorage and sends it via the Authorization header on every request.
+bearer_transport = BearerTransport(tokenUrl="/auth/jwt/login")
+
+auth_backend = AuthenticationBackend(
+    name="jwt_bearer",
+    transport=bearer_transport,
+    get_strategy=get_jwt_strategy,
+)
+
+# 2) Redirect cookie transport — returns 302 to frontend with Set-Cookie
+#    Used for the OAuth callback flow (Google/Facebook) where the browser
+#    arrives via a top-level redirect and cookies are first-party.
 oauth_cookie_transport = RedirectCookieTransport(
     redirect_url=settings.frontend_url,
     **_cookie_kwargs,
 )
 
-
-def get_jwt_strategy() -> JWTStrategy:
-    return JWTStrategy(secret=SECRET, lifetime_seconds=3600)
-
-
-# Backend for email/password login (AJAX — returns 204 with Set-Cookie)
-auth_backend = AuthenticationBackend(
-    name="jwt_cookie",
-    transport=cookie_transport,
-    get_strategy=get_jwt_strategy,
-)
-
-# Backend for OAuth login (browser redirect — returns 302 with Set-Cookie)
 oauth_auth_backend = AuthenticationBackend(
     name="jwt_cookie_oauth",
     transport=oauth_cookie_transport,
     get_strategy=get_jwt_strategy,
 )
 
-# FastAPIUsers needs all backends so it can read the cookie for
-# current_user() regardless of which backend issued it.
+# FastAPIUsers needs all backends so current_user() can authenticate via
+# either the Authorization header (bearer) or the cookie (OAuth sessions).
 fastapi_users = FastAPIUsers[User, int](get_user_manager, [auth_backend, oauth_auth_backend])
 
 current_active_user = fastapi_users.current_user(active=True)

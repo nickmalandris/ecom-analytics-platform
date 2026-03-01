@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { BarChart3 } from 'lucide-react';
-import { api, API_BASE_URL } from '../lib/api';
+import { api, API_BASE_URL, setToken } from '../lib/api';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -20,9 +20,13 @@ export default function Login() {
     formData.append('password', password);
 
     try {
-      await api.post('/auth/jwt/login', formData, {
+      const res = await api.post('/auth/jwt/login', formData, {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       });
+      // Backend returns { access_token, token_type } — store it for future requests
+      if (res.data?.access_token) {
+        setToken(res.data.access_token);
+      }
       navigate('/');
     } catch {
       setError('Invalid email or password');

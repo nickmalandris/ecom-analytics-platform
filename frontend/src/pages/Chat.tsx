@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Layout from '../components/Layout';
-import { api, API_BASE_URL } from '../lib/api';
+import { api, API_BASE_URL, getToken } from '../lib/api';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -76,9 +76,14 @@ export default function Chat() {
 
     try {
       const base = API_BASE_URL || '';
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const token = getToken();
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
       const response = await fetch(base ? `${base}/api/chat` : '/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ message: text.trim() }),
         credentials: 'include',
       });

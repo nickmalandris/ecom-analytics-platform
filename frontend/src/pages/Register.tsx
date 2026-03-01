@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { BarChart3 } from 'lucide-react';
-import { api, isAxiosError, API_BASE_URL } from '../lib/api';
+import { api, isAxiosError, API_BASE_URL, setToken } from '../lib/api';
 
 export default function Register() {
   const [email, setEmail] = useState('');
@@ -23,7 +23,18 @@ export default function Register() {
         is_superuser: false,
         is_verified: false,
       });
-      navigate('/login');
+
+      // Auto-login after successful registration
+      const formData = new URLSearchParams();
+      formData.append('username', email);
+      formData.append('password', password);
+      const loginRes = await api.post('/auth/jwt/login', formData, {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      });
+      if (loginRes.data?.access_token) {
+        setToken(loginRes.data.access_token);
+      }
+      navigate('/');
     } catch (err: unknown) {
       if (isAxiosError(err)) {
         if (err.response?.data?.detail === 'REGISTER_USER_ALREADY_EXISTS') {

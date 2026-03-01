@@ -7,7 +7,7 @@ import {
   BarChart3,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { api } from '@/lib/api';
+import { api, clearToken } from '@/lib/api';
 
 const NAV_ITEMS = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -22,9 +22,11 @@ export default function Sidebar({ email }: { email?: string }) {
   const handleLogout = async () => {
     try {
       await api.post('/auth/jwt/logout');
+    } catch {
+      // Bearer logout returns 204 — errors are non-critical
+    } finally {
+      clearToken();
       navigate('/login');
-    } catch (err) {
-      console.error('Logout failed', err);
     }
   };
 

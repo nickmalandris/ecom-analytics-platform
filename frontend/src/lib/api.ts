@@ -32,9 +32,49 @@ if (!API_BASE_URL && typeof window !== 'undefined') {
   console.warn('[api] No backend host configured; falling back to same-origin requests.');
 }
 
+// ─── Token helpers ──────────────────────────────────────
+
+const TOKEN_KEY = 'analytics_token';
+
+export function getToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function setToken(token: string): void {
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
+export function clearToken(): void {
+  localStorage.removeItem(TOKEN_KEY);
+}
+
+// ─── Axios instance ─────────────────────────────────────
+
 export const api = axios.create({
   baseURL: API_BASE_URL,
-  withCredentials: true,
+  withCredentials: true, // still needed for OAuth cookie-based sessions
 });
+
+// Attach the bearer token (if present) to every outgoing request.
+// OAuth sessions fall back to the cookie automatically.
+api.interceptors.request.use((config) => {
+  const token = getToken();
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// Clear a stale/expired token on 401 so the next page navigation
+// doesn't loop between the dashboard and the login page.
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (axios.isAxiosError(error) && error.response?.status === 401) {
+      clearToken();
+    }
+    return Promise.reject(error);
+  },
+);
 
 export const isAxiosError = axios.isAxiosError;
