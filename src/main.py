@@ -35,7 +35,7 @@ from src.api.users import router as users_router
 from src.api.tenants import router as tenants_router
 from src.scheduler.scheduler import start_scheduler, stop_scheduler
 from src.config import settings
-from src.db import engine
+from src.db import engine, ensure_base_tables
 
 # ── Sentry ───────────────────────────────────────
 
@@ -112,6 +112,7 @@ logging.getLogger("httpcore").setLevel(logging.WARNING)
 async def lifespan(app: FastAPI):
     """Startup/shutdown lifecycle for the FastAPI app."""
     logger.info("Starting up...")
+    ensure_base_tables()
     start_scheduler()
     yield
     logger.info("Shutting down...")
