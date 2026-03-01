@@ -12,10 +12,12 @@ from fastapi_users import BaseUserManager, FastAPIUsers, IntegerIDMixin
 from fastapi_users.authentication import (
     AuthenticationBackend,
     BearerTransport,
-    CookieTransport,
     JWTStrategy,
+    Transport,
 )
 from fastapi_users.db import SQLAlchemyUserDatabase
+from fastapi_users.authentication.transport.base import TransportLogoutNotSupportedError
+from fastapi_users.openapi import OpenAPIResponseType
 
 from src.auth.db import User, get_user_db
 from src.config import settings
@@ -47,30 +49,36 @@ async def get_user_manager(user_db: SQLAlchemyUserDatabase = Depends(get_user_db
 
 # ─── Authentication Backends ─────────────────────────────
 
-# Cookie settings for the OAuth redirect flow (browser top-level navigation).
-_cookie_kwargs = dict(
-    cookie_name="analytics_auth",
-    cookie_max_age=3600,
-    cookie_secure=settings.environment == "production",
-    cookie_samesite="none" if settings.environment == "production" else "lax",
-)
 
+class RedirectBearerTransport(Transport):
+    """Transport that redirects to the frontend with the token in a query param.
 
-class RedirectCookieTransport(CookieTransport):
-    """CookieTransport that redirects to the frontend after login.
-
-    Used exclusively for the OAuth callback flow where the browser arrives via
-    a redirect from the identity provider and needs to be sent to the frontend
-    app with the auth cookie already set on the response.
+    Used for the OAuth callback flow where the browser arrives via a top-level
+    redirect from the identity provider.  Instead of setting a cookie (which
+    would be blocked as a third-party cookie in cross-origin deployments), the
+    JWT is appended to the redirect URL as ``?token=<jwt>``.  The frontend
+    reads the token, stores it in localStorage, and strips it from the URL.
     """
 
-    def __init__(self, redirect_url: str, **kwargs):
-        super().__init__(**kwargs)
+    scheme = None  # type: ignore[assignment]  # not used for OAuth flow
+
+    def __init__(self, redirect_url: str):
         self.redirect_url = redirect_url
 
     async def get_login_response(self, token: str) -> Response:
-        response = RedirectResponse(url=self.redirect_url, status_code=302)
-        return self._set_login_cookie(response, token)
+        url = f"{self.redirect_url}?token={token}"
+        return RedirectResponse(url=url, status_code=302)
+
+    async def get_logout_response(self) -> Response:
+        raise TransportLogoutNotSupportedError()
+
+    @staticmethod
+    def get_openapi_login_responses_success() -> OpenAPIResponseType:
+        return {}
+
+    @staticmethod
+    def get_openapi_logout_responses_success() -> OpenAPIResponseType:
+        return {}
 
 
 def get_jwt_strategy() -> JWTStrategy:
@@ -88,22 +96,21 @@ auth_backend = AuthenticationBackend(
     get_strategy=get_jwt_strategy,
 )
 
-# 2) Redirect cookie transport — returns 302 to frontend with Set-Cookie
-#    Used for the OAuth callback flow (Google/Facebook) where the browser
-#    arrives via a top-level redirect and cookies are first-party.
-oauth_cookie_transport = RedirectCookieTransport(
+# 2) Redirect bearer transport — returns 302 to frontend with token in URL
+#    Used for the OAuth callback flow (Google/Facebook). Avoids third-party
+#    cookie issues entirely by passing the JWT via the redirect URL.
+oauth_redirect_transport = RedirectBearerTransport(
     redirect_url=settings.frontend_url,
-    **_cookie_kwargs,
 )
 
 oauth_auth_backend = AuthenticationBackend(
-    name="jwt_cookie_oauth",
-    transport=oauth_cookie_transport,
+    name="jwt_redirect",
+    transport=oauth_redirect_transport,
     get_strategy=get_jwt_strategy,
 )
 
 # FastAPIUsers needs all backends so current_user() can authenticate via
-# either the Authorization header (bearer) or the cookie (OAuth sessions).
+# either the Authorization header (bearer) or the redirect token (OAuth).
 fastapi_users = FastAPIUsers[User, int](get_user_manager, [auth_backend, oauth_auth_backend])
 
 current_active_user = fastapi_users.current_user(active=True)

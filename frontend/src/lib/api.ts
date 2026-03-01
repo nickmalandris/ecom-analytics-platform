@@ -48,6 +48,23 @@ export function clearToken(): void {
   localStorage.removeItem(TOKEN_KEY);
 }
 
+// ─── Capture OAuth token from redirect URL ──────────────
+// After a Google/Facebook OAuth login the backend redirects to
+// <frontend>/?token=<jwt>.  We grab it, persist it, and strip
+// the query parameter so it doesn't leak into bookmarks/history.
+if (typeof window !== 'undefined') {
+  const params = new URLSearchParams(window.location.search);
+  const urlToken = params.get('token');
+  if (urlToken) {
+    setToken(urlToken);
+    // Remove ?token=... from the address bar without a page reload
+    params.delete('token');
+    const clean = params.toString();
+    const newUrl = window.location.pathname + (clean ? `?${clean}` : '') + window.location.hash;
+    window.history.replaceState({}, '', newUrl);
+  }
+}
+
 // ─── Axios instance ─────────────────────────────────────
 
 export const api = axios.create({
