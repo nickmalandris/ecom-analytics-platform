@@ -3,8 +3,7 @@ FastAPI router for user authentication endpoints.
 Includes email/password auth and Google/Facebook OAuth via fastapi-users.
 """
 
-from fastapi import APIRouter, Request, Response, HTTPException
-from starlette.middleware.base import BaseHTTPMiddleware
+from fastapi import APIRouter, HTTPException
 from starlette.responses import RedirectResponse
 
 from src.auth.manager import auth_backend, fastapi_users
@@ -112,35 +111,3 @@ async def google_browser_authorize():
 @router.get("/auth/facebook/browser", include_in_schema=False)
 async def facebook_browser_authorize():
     return await _browser_authorize(facebook_oauth_client, "facebook")
-
-
-# ─── OAuth Callback Redirect Middleware ──────────────────
-# fastapi-users' CookieTransport returns 204 on the OAuth callback.
-# Since this is a browser redirect from Google/Facebook, we need to
-# redirect the user to the frontend after the auth cookie is set.
-
-class OAuthCallbackRedirectMiddleware(BaseHTTPMiddleware):
-    """After OAuth callback sets the auth cookie (204), redirect to frontend."""
-
-    OAUTH_CALLBACK_PATHS = {"/auth/google/callback", "/auth/facebook/callback"}
-
-    async def dispatch(self, request: Request, call_next):
-        try:
-            response: Response = await call_next(request)
-
-            if request.url.path in self.OAUTH_CALLBACK_PATHS and response.status_code == 204:
-                # Build redirect response preserving the Set-Cookie headers
-                redirect = RedirectResponse(url=settings.frontend_url, status_code=302)
-                # Copy cookies from the original response (using raw headers since MutableHeaders lacks multi_items)
-                for key, value in response.headers.raw:
-                    if key.lower() == b"set-cookie":
-                        redirect.headers.append("set-cookie", value.decode("latin-1"))
-                return redirect
-
-            return response
-        except Exception as e:
-            import traceback
-            err_msg = traceback.format_exc()
-            print(f"OAUTH MIDDLEWARE CAUGHT ERROR:\\n{err_msg}")
-            from fastapi.responses import JSONResponse
-            return JSONResponse(status_code=500, content={"error": "Internal Server Error", "detail": str(e), "traceback": err_msg})

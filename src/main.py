@@ -31,7 +31,7 @@ from src.api.connections import router as connections_router
 from src.api.onboarding import router as onboarding_router
 from src.api.reports import router as reports_router
 from src.api.sync import router as sync_router
-from src.api.users import router as users_router, OAuthCallbackRedirectMiddleware
+from src.api.users import router as users_router
 from src.api.tenants import router as tenants_router
 from src.scheduler.scheduler import start_scheduler, stop_scheduler
 from src.config import settings
@@ -184,9 +184,6 @@ logger.info(
     google=bool(settings.google_client_id and settings.google_client_secret),
     facebook=bool(settings.meta_app_id and settings.meta_app_secret),
 )
-
-# OAuth callback redirect middleware (must be added before routers)
-app.add_middleware(OAuthCallbackRedirectMiddleware)
 
 # Mount routers
 app.include_router(tenants_router, prefix="/api")
