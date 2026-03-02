@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
-import { api, isAxiosError } from '../lib/api';
+import { api, isAxiosError, API_BASE_URL } from '../lib/api';
 
 interface ConnectionStatus {
   shopify: { connected: boolean; store_url?: string };
@@ -124,7 +124,8 @@ export default function Connectors() {
 
   const handleConnectMeta = () => {
     if (status?.tenant_id) {
-      window.location.href = `/api/auth/meta/initiate/${status.tenant_id}`;
+      const base = API_BASE_URL || '';
+      window.location.href = `${base}/api/auth/meta/initiate/${status.tenant_id}`;
     }
   };
 
