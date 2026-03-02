@@ -3,7 +3,7 @@ User manager for FastAPI Users.
 Handles registration, authentication, and password management.
 """
 
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import Depends, Request
 from fastapi.responses import Response
@@ -58,11 +58,15 @@ class RedirectBearerTransport(Transport):
     would be blocked as a third-party cookie in cross-origin deployments), the
     JWT is appended to the redirect URL as ``?token=<jwt>``.  The frontend
     reads the token, stores it in localStorage, and strips it from the URL.
+
+    For ``current_user()`` to work, this transport shares the same
+    ``OAuth2PasswordBearer`` scheme as the primary ``BearerTransport`` so
+    FastAPI-Users can extract the token from the ``Authorization`` header
+    regardless of which backend originally issued it.
     """
 
-    scheme = None  # type: ignore[assignment]  # not used for OAuth flow
-
-    def __init__(self, redirect_url: str):
+    def __init__(self, redirect_url: str, *, scheme: Any):
+        self.scheme = scheme
         self.redirect_url = redirect_url
 
     async def get_login_response(self, token: str) -> Response:
@@ -101,6 +105,7 @@ auth_backend = AuthenticationBackend(
 #    cookie issues entirely by passing the JWT via the redirect URL.
 oauth_redirect_transport = RedirectBearerTransport(
     redirect_url=settings.frontend_url,
+    scheme=bearer_transport.scheme,
 )
 
 oauth_auth_backend = AuthenticationBackend(
